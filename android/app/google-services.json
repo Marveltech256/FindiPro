@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "456209894195",
+    "project_id": "findipro-7fe13",
+    "storage_bucket": "findipro-7fe13.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:456209894195:android:df5121a7737b8005f24c46",
+        "android_client_info": {
+          "package_name": "com.findipro.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "456209894195-q7rp6q0t6o07f866oeqhmpevgssnv7mt.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCniJX_rNqgRDIWuLD0tLs1anJYASQw3FM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "456209894195-q7rp6q0t6o07f866oeqhmpevgssnv7mt.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "456209894195-kcmfker163430v42dcvomb38ihh368d0.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.findipro"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
