@@ -1,99 +1,78 @@
+import 'package:findipro/models/user_model.dart';
+import 'package:findipro/repositories/user_repository.dart';
 import 'package:flutter/material.dart';
-import '../data/mock_data.dart';
-import '../models/provider_model.dart';
-import '../widgets/category_card.dart';
-import '../widgets/provider_card.dart';
+import 'package:provider/provider.dart';
 
-class HomeScreen extends StatefulWidget {
+class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
-  
-  @override
-  State<HomeScreen> createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  List<ServiceProvider> _filteredProviders = MockData.providers;
-  final _searchController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _searchController.addListener(_filterProviders);
-  }
-  
-  void _filterProviders() {
-    final query = _searchController.text.toLowerCase();
-    setState(() {
-      _filteredProviders = MockData.providers.where((provider) {
-        final providerText = '${provider.name} ${provider.category} ${provider.location}'.toLowerCase();
-        return providerText.contains(query);
-      }).toList();
-    });
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
+    final userRepository = context.read<UserRepository>();
 
     return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Greeting
-              Text('Hi there 👋', style: textTheme.bodyLarge),
-              Text('Find a pro for the job', style: textTheme.headlineSmall),
-              const SizedBox(height: 24),
+      appBar: AppBar(
+        title: const Text('FindiPro'),
+      ),
+      body: StreamBuilder<List<UserModel>>(
+        stream: userRepository.getProvidersStream(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-              // Search Field
-              TextField(
-                controller: _searchController,
-                decoration: const InputDecoration(
-                  hintText: 'Search plumber, mechanic...',
-                  prefixIcon: Icon(Icons.search),
-                ),
-              ),
-              const SizedBox(height: 24),
+          if (snapshot.hasError) {
+            return Center(
+              child: Text('Failed to load providers: ${snapshot.error}'),
+            );
+          }
 
-              // Categories Section
-              Text('Categories', style: textTheme.titleLarge),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 90,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: MockData.categories.length,
-                  separatorBuilder: (context, index) => const SizedBox(width: 12),
-                  itemBuilder: (context, index) {
-                    return CategoryCard(category: MockData.categories[index]);
-                  },
-                ),
-              ),
-              const SizedBox(height: 24),
+          final providers = snapshot.data ?? [];
 
-              // Providers Section
-              Text('Top Rated Providers', style: textTheme.titleLarge),
-              const SizedBox(height: 16),
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _filteredProviders.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  return ProviderCard(provider: _filteredProviders[index]);
-                },
-              ),
-            ],
-          ),
-        ),
+          if (providers.isEmpty) {
+            return const Center(
+              child: Text('No service providers available yet.'),
+            );
+          }
+
+          return RefreshIndicator(
+            onRefresh: () async {},
+            child: ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: providers.length,
+              itemBuilder: (context, index) {
+                final provider = providers[index];
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundImage: provider.photoUrl != null &&
+                              provider.photoUrl!.isNotEmpty
+                          ? NetworkImage(provider.photoUrl!)
+                          : null,
+                      child: provider.photoUrl == null ||
+                              provider.photoUrl!.isEmpty
+                          ? const Icon(Icons.person)
+                          : null,
+                    ),
+                    title: Text(provider.name),
+                    subtitle: Text(
+                      '${provider.category ?? 'Service Provider'} • ${provider.location ?? 'Kampala'}',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      // This part is a placeholder. The ProviderProfileScreen needs to be updated
+                      // to accept a providerId and fetch the data itself.
+                      // For now, this will cause an error if ProviderProfileScreen expects a ServiceProvider object.
+                      // We will address this in a later step.
+                    },
+                  ),
+                );
+              },
+            ),
+          );
+        },
       ),
     );
   }

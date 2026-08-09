@@ -1,17 +1,1 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
-class UserRepository {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
-  Future<Map<String, dynamic>?> getUser(String uid) async {
-    final doc = await _firestore.collection('users').doc(uid).get();
-    return doc.data();
-  }
-
-  Future<void> updateUser(String uid, Map<String, dynamic> data) async {
-    await _firestore.collection('users').doc(uid).set(
-      data,
-      SetOptions(merge: true),
-    );
-  }
-}
+import 'package:cloud_firestore/cloud_firestore.dart'; class UserRepository { final _db = FirebaseFirestore.instance; Future<void> createClient({ required String uid, required String name, required String email, required String phone, }) async { await _db.collection('users').doc(uid).set({ 'uid': uid, 'name': name, 'email': email, 'phone': phone, 'role': 'client', 'createdAt': FieldValue.serverTimestamp(), }); } Future<void> createProvider({ required String uid, required String name, required String email, required String phone, required String category, required String location, }) async { await _db.collection('providers').doc(uid).set({ 'uid': uid, 'name': name, 'email': email, 'phone': phone, 'category': category, 'location': location, 'isApproved': false, 'createdAt': FieldValue.serverTimestamp(), }); } }

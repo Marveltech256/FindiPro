@@ -1,0 +1,115 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to check if a user has a specific role
+    function isRole(role) {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    }
+    
+    // Helper function to check if a user is an admin
+    function isAdmin() {
+      // An admin has the role 'admin' in their user document
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // USERS collection
+    // Users can read their own profile, and public profiles.
+    // They can only create their own user document and update specific fields.
+    match /users/{userId} {
+      // Admins can read any user profile. Users can read their own.
+      allow read: if request.auth.uid == userId || isAdmin();
+      allow create: if request.auth.uid == userId; // Allow user to create their own document on signup
+      // Users can update their own non-critical fields. Admins can update anything.
+      allow update: if (request.auth.uid == userId &&
+                       // Prevent users from changing their role or verification status
+                       !('role' in request.resource.data) &&
+                       !('isApproved' in request.resource.data) &&
+                       !('isBlocked' in request.resource.data) &&
+                       !('isDeleted' in request.resource.data)) || isAdmin();
+      allow delete: if false; // Nobody can delete user accounts from the client
+    }
+
+    // PROVIDERS collection (public business info)
+    match /providers/{providerId} {
+      allow read: if true; // Publicly readable
+      allow create, update: if request.auth.uid == providerId && isRole('provider'); // Only the provider can create/update their business profile
+      allow delete: if false;
+    }
+
+    // BOOKINGS collection
+    // Clients can create bookings for themselves.
+    // Clients and Providers can only read/update bookings they are part of.
+    match /bookings/{bookingId} {
+      allow read: if request.auth.uid == resource.data.clientId || request.auth.uid == resource.data.providerId;
+      allow create: if request.auth.uid == request.resource.data.clientId &&
+                       // On creation, status must be 'pending'
+                       request.resource.data.status == 'pending';
+
+      // Update rules are more complex to handle the lifecycle
+      allow update: if (request.auth.uid == resource.data.clientId || request.auth.uid == resource.data.providerId) &&
+                       // Prevent changing the core participants of the booking
+                       request.resource.data.clientId == resource.data.clientId &&
+                       request.resource.data.providerId == resource.data.providerId && (
+                       // Provider can accept/decline a pending request
+                       (isRole('provider') && resource.data.status == 'pending' && (request.resource.data.status == 'accepted' || request.resource.data.status == 'declined')) ||
+                       // Provider can start an accepted request
+                       (isRole('provider') && resource.data.status == 'accepted' && request.resource.data.status == 'inProgress') ||
+                       // Provider can complete an in-progress request
+                       (isRole('provider') && resource.data.status == 'inProgress' && request.resource.data.status == 'providerCompleted') ||
+                       // Client can confirm a provider-completed request
+                       (isRole('client') && resource.data.status == 'providerCompleted' && request.resource.data.status == 'clientConfirmed')
+                       );
+      allow delete: if false; // Don't allow deletion, prefer 'cancelled' status
+    }
+
+    // NOTIFICATIONS collection
+    // Users can only read their own notifications.
+    // Creation should ideally be handled by Cloud Functions for security.
+    match /notifications/{notificationId} {
+      allow read: if request.auth.uid == resource.data.recipientId;
+      allow create: if request.auth.uid == request.resource.data.senderId || request.auth.uid == request.resource.data.recipientId; // Allow creation if authenticated
+      allow update: if request.auth.uid == resource.data.recipientId &&
+                       // Only allow updating the 'isRead' flag
+                       request.resource.data.keys().hasOnly(['isRead']);
+      allow delete: if false;
+    }
+
+    // REPORTS collection
+    // Users can create reports, but cannot read, update, or delete them.
+    // Admin role would be needed to manage reports.
+    match /reports/{reportId} {      allow read, update, delete: if isAdmin(); // Only admins can manage reports
+      allow create: if request.auth.uid != null && // Any authenticated user can create a report
+                       // Ensure the reporter is the authenticated user
+                       request.resource.data.reporterId == request.auth.uid &&
+                       // Ensure status is 'pending' on creation
+                       request.resource.data.status == 'pending';
+    }
+
+    // REVIEWS collection
+    // Users can only create a review for a booking they were the client for,
+    // and only after it has been confirmed by them.
+    match /reviews/{reviewId} {
+      allow read: if true; // Reviews are public
+      allow create: if request.auth.uid != null &&
+                       // Must be the client of the booking
+                       request.resource.data.clientId == request.auth.uid &&
+                       // The associated booking must be in the 'clientConfirmed' state
+                       get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.status == 'clientConfirmed' &&
+                       // Rating must be between 1 and 5
+                       request.resource.data.rating >= 1 && request.resource.data.rating <= 5;
+      allow update, delete: if false; // Reviews are immutable
+    }
+    
+    // ADMIN_LOGS collection
+    // Only admins can create logs (ideally via a trusted server/function).
+    // No one can read/update/delete from the client.
+    match /admin_logs/{logId} {
+      allow read, update, delete: if false;
+      // Creation should be locked down to a Cloud Function in a real production app.
+      // For now, we can allow admins to create.
+      allow create: if isAdmin();
+    }
+  }
+}

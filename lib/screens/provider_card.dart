@@ -28,7 +28,7 @@ class ProviderCard extends StatelessWidget {
                 placeholder: (context, url) => Container(
                   width: 80,
                   height: 80,
-                  color: AppTheme.subtleBorderColor.withOpacity(0.5),
+                  color: AppTheme.subtleBorderColor.withValues(alpha: 0.5),
                   child: const Center(child: Icon(Icons.image, color: AppTheme.iconColor)),
                 ),
                 errorWidget: (context, url, error) => const Icon(Icons.business, size: 40, color: AppTheme.iconColor),

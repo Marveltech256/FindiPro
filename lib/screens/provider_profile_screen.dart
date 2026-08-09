@@ -140,7 +140,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
             Image.network(
               widget.provider.profileImageUrl,
               fit: BoxFit.cover,
-              color: Colors.black.withOpacity(0.4),
+              color: Colors.black.withValues(alpha: 0.4),
               colorBlendMode: BlendMode.darken,
             ),
             Positioned(
@@ -252,7 +252,7 @@ class _ProviderProfileScreenState extends State<ProviderProfileScreen> {
       alignment: Alignment.bottomCenter,
       child: Container(
         padding: const EdgeInsets.all(16),
-        color: AppTheme.backgroundColor.withOpacity(0.9),
+        color: AppTheme.backgroundColor.withValues(alpha: 0.9),
         child: ElevatedButton(
           onPressed: () {
             // TODO: Show hire request modal

@@ -9,7 +9,7 @@ class SkillChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Chip(
       label: Text(label),
-      backgroundColor: AppTheme.accentColor.withOpacity(0.1),
+      backgroundColor: AppTheme.accentColor.withValues(alpha: 0.1),
       labelStyle: const TextStyle(
         color: AppTheme.accentColor,
         fontWeight: FontWeight.w600,

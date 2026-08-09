@@ -1,22 +1,24 @@
 import 'dart:io';
 import 'package:firebase_storage/firebase_storage.dart';
 
+/// A service dedicated to handling file uploads and compression with Firebase Storage.
 class StorageService {
   final FirebaseStorage _storage = FirebaseStorage.instance;
 
-  Future<String> uploadImage({
-    required File file,
-    required String path,
-  }) async {
-    final ref = _storage.ref().child(path);
-    await ref.putFile(file);
-    return await ref.getDownloadURL();
+  /// Compresses the given image file to reduce its size before uploading.
+  Future<File> compressImage(File file) async {
+    // Temporary safe implementation
+    return file;
   }
 
-  Future<void> deleteImage(String imageUrl) async {
+  /// Uploads a file to the specified path in Firebase Storage and returns the download URL.
+  Future<String> uploadFile(String path, File file) async {
     try {
-      final ref = _storage.refFromURL(imageUrl);
-      await ref.delete();
-    } catch (_) {}
+      final ref = _storage.ref().child(path);
+      await ref.putFile(file);
+      return await ref.getDownloadURL();
+    } on FirebaseException catch (e) {
+      throw Exception('Error uploading file: ${e.message}');
+    }
   }
 }
