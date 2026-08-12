@@ -1,185 +1,74 @@
-import 'package:findipro/models/chat_message.dart';
-import 'package:findipro/repositories/message_repository.dart';
-import 'package:findipro/services/auth_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+import '../models/chat_message.dart';
+import '../models/conversation.dart';
+import '../repositories/message_repository.dart';
 
 class ChatScreen extends StatefulWidget {
-  final String conversationId;
-  final String otherParticipantName;
-
-  const ChatScreen({
-    super.key,
-    required this.conversationId,
-    required this.otherParticipantName,
-  });
-
-  @override
-  State<ChatScreen> createState() => _ChatScreenState();
+  final String conversationId; final String currentUserId; final String otherUserId;
+  const ChatScreen({super.key,required this.conversationId,required this.currentUserId,required this.otherUserId});
+  @override State<ChatScreen> createState()=>_ChatScreenState();
 }
-
-class _ChatScreenState extends State<ChatScreen> {
-  final _messageController = TextEditingController();
-  final _scrollController = ScrollController();
+class _ChatScreenState extends State<ChatScreen>{
+  final _text = TextEditingController();
+  final _repo = MessageRepository();
 
   @override
   void initState() {
     super.initState();
-    _markMessagesAsRead();
-  }
-
-  Future<void> _markMessagesAsRead() async {
-    // Give a slight delay to ensure the widget is fully built
-    Future.delayed(const Duration(milliseconds: 500), () {
-      final messageRepo = context.read<MessageRepository>();
-      final authService = context.read<AuthService>();
-      final uid = authService.currentUser?.uid;
-      if (uid != null) {
-        messageRepo.markMessagesAsRead(
-          conversationId: widget.conversationId,
-          currentUserId: uid,
-        );
-      }
-    });
+    _repo.markMessagesAsRead(conversationId: widget.conversationId, currentUserId: widget.currentUserId);
   }
 
   @override
   void dispose() {
-    _messageController.dispose();
-    _scrollController.dispose();
+    _text.dispose();
     super.dispose();
   }
 
-  void _sendMessage() {
-    final messageRepo = context.read<MessageRepository>();
-    final authService = context.read<AuthService>();
-    final uid = authService.currentUser?.uid;
-    final text = _messageController.text;
-
-    if (uid != null && text.isNotEmpty) {
-      // The receiverId needs to be fetched from the conversation document.
-      // This is a simplified approach. A robust solution would fetch the conversation
-      // details once and store them in the state.
-      // For now, we assume the other participant is the receiver.
-      // A full implementation would get the participants list and find the other ID.
-      messageRepo.sendMessage(
-        conversationId: widget.conversationId,
-        senderId: uid,
-        receiverId: '', // This needs to be the other participant's ID
-        text: text,
-      );
-      _messageController.clear();
-      _scrollController.animateTo(
-        0.0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+  Future<void> _send() async {
+    final text = _text.text.trim();
+    if (text.isEmpty) return;
+    _text.clear();
+    try {
+      await _repo.sendMessage(conversationId: widget.conversationId, senderId: widget.currentUserId, receiverId: widget.otherUserId, text: text);
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message could not be sent.')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final messageRepo = context.read<MessageRepository>();
-    final authService = context.read<AuthService>();
-    final uid = authService.currentUser?.uid;
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.otherParticipantName),
-        // TODO: Add a popup menu for Block/Report actions
-      ),
-      body: Column(
-        children: [
+        appBar: AppBar(title: const Text('Conversation')),
+        body: Column(children: [
           Expanded(
-            child: StreamBuilder<List<ChatMessage>>(
-              stream: messageRepo.getMessages(widget.conversationId),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return const Center(child: Text('Say hello!'));
-                }
-                final messages = snapshot.data!;
-                return ListView.builder(
-                  controller: _scrollController,
-                  reverse: true,
-                  padding: const EdgeInsets.all(16.0),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final message = messages[index];
-                    final isMe = message.senderId == uid;
-                    return _MessageBubble(message: message, isMe: isMe);
-                  },
-                );
-              },
-            ),
-          ),
-          _buildMessageComposer(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMessageComposer() {
-    return Container(
-      padding: const EdgeInsets.all(8.0),
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            spreadRadius: 1,
-            blurRadius: 1,
-            offset: const Offset(0, -1),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _messageController,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration.collapsed(
-                  hintText: 'Send a message...',
-                ),
-              ),
-            ),
-            IconButton(
-              icon: Icon(Icons.send, color: Theme.of(context).primaryColor),
-              onPressed: _sendMessage,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MessageBubble extends StatelessWidget {
-  final ChatMessage message;
-  final bool isMe;
-
-  const _MessageBubble({required this.message, required this.isMe});
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: isMe ? Theme.of(context).primaryColor : Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          message.text,
-          style: TextStyle(color: isMe ? Colors.white : Colors.black87),
-        ),
-      ),
-    );
+              child: StreamBuilder<List<ChatMessage>>(
+                  stream: _repo.getMessages(widget.conversationId),
+                  builder: (context, s) {
+                    if (s.hasError) return const Center(child: Text('Could not load messages.'));
+                    if (!s.hasData) return const Center(child: CircularProgressIndicator());
+                    final messages = s.data!;
+                    if (messages.isEmpty) return const Center(child: Text('Say hello!'));
+                    return ListView.builder(
+                        reverse: true,
+                        padding: const EdgeInsets.all(16),
+                        itemCount: messages.length,
+                        itemBuilder: (c, i) {
+                          final m = messages[i];
+                          final me = m.senderId == FirebaseAuth.instance.currentUser?.uid;
+                          return Align(
+                              alignment: me ? Alignment.centerRight : Alignment.centerLeft,
+                              child: Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+                                  decoration: BoxDecoration(color: me ? const Color(0xFF06B6D4) : Colors.grey.shade200, borderRadius: BorderRadius.circular(18)),
+                                  child: Text(m.text, style: TextStyle(color: me ? Colors.white : Colors.black87))));
+                        });
+                  })),
+          SafeArea(
+              child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Row(children: [Expanded(child: TextField(controller: _text, decoration: const InputDecoration(hintText: 'Send a message...'))), IconButton(onPressed: _send, icon: const Icon(Icons.send))])))
+        ]));
   }
 }

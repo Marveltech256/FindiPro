@@ -13,19 +13,20 @@ dependencies:
   geolocator: ^14.0.2 
   geocoding: ^4.0.0
   google_sign_in: ^6.2.1
+
   # State management
   provider: ^6.1.2
 
   # Firebase
-  firebase_core:
-  firebase_auth:
-  cloud_firestore:
-  firebase_storage:
-  firebase_messaging:
+  firebase_core: ^3.2.0
+  firebase_auth: ^5.1.2
+  cloud_firestore: ^5.1.0
+  firebase_storage: ^12.1.1
+  firebase_messaging: ^15.2.10
 
   # UI helpers
-  google_fonts: ^8.2.1
-  cached_network_image:
+  google_fonts: ^6.2.1
+  cached_network_image: ^3.3.1
   intl: ^0.19.0
   url_launcher: ^6.3.0
   shared_preferences: ^2.2.3
@@ -42,5 +43,4 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   # assets:
-  #   - assets/images/
-  #   - assets/icons/
+  #   - assets/images/google_logo.png

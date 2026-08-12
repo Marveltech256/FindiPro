@@ -1,73 +1,93 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-	static const Color navy = Color(0xFF0F172A);
-	static const Color skyBlue = Color(0xFF0EA5E9);
-	static const Color teal = Color(0xFF14B8A6);
-	static const Color surface = Color(0xFFF8FAFC);
+  static const Color primaryBlue = Color(0xFF1565C0);
+  static const Color accentOrange = Color(0xFFFF9800);
+  static const Color accentGreen = Color(0xFF00A86B);
 
-	static ThemeData get lightTheme {
-		final scheme = ColorScheme.fromSeed(
-			seedColor: skyBlue,
-			primary: skyBlue,
-			secondary: teal,
-			surface: Colors.white,
-			brightness: Brightness.light,
-		);
+  static const Color backgroundLight = Color(0xFFF5F7FB);
+  static const Color backgroundDark = Color(0xFF0F172A);
 
-		return ThemeData(
-			useMaterial3: true,
-			colorScheme: scheme,
-			scaffoldBackgroundColor: surface,
-			appBarTheme: const AppBarTheme(
-				backgroundColor: Colors.transparent,
-				elevation: 0,
-				foregroundColor: navy,
-				centerTitle: false,
-			),
-			cardTheme: CardThemeData(
-				color: Colors.white,
-				elevation: 2,
-				shadowColor: Colors.black12,
-				shape: RoundedRectangleBorder(
-					borderRadius: BorderRadius.circular(22),
-				),
-				margin: EdgeInsets.zero,
-			),
-			inputDecorationTheme: InputDecorationTheme(
-				filled: true,
-				fillColor: Colors.white,
-				contentPadding:
-						const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-				border: OutlineInputBorder(
-					borderRadius: BorderRadius.circular(18),
-					borderSide: BorderSide.none,
-				),
-			),
-			textTheme: const TextTheme(
-				headlineMedium: TextStyle(
-					fontSize: 30,
-					fontWeight: FontWeight.w800,
-					color: navy,
-				),
-				headlineSmall: TextStyle(
-					fontSize: 24,
-					fontWeight: FontWeight.w700,
-					color: navy,
-				),
-				titleLarge: TextStyle(
-					fontSize: 20,
-					fontWeight: FontWeight.w700,
-					color: navy,
-				),
-				titleMedium: TextStyle(
-					fontSize: 16,
-					fontWeight: FontWeight.w600,
-					color: navy,
-				),
-				bodyLarge: TextStyle(fontSize: 16, color: navy),
-				bodyMedium: TextStyle(fontSize: 14, color: navy),
-			),
-		);
-	}
+  static const Color surfaceLight = Colors.white;
+  static const Color surfaceDark = Color(0xFF1E293B);
+
+  static final ThemeData lightTheme = ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.light,
+    scaffoldBackgroundColor: backgroundLight,
+    colorScheme: const ColorScheme.light(
+      primary: primaryBlue,
+      secondary: accentOrange,
+      surface: surfaceLight,
+    ),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: surfaceLight,
+      foregroundColor: Colors.black,
+      elevation: 0,
+      centerTitle: false,
+    ),
+    cardTheme: CardThemeData(
+      color: surfaceLight,
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: primaryBlue, width: 1.5),
+      ),
+    ),
+  );
+
+  static final ThemeData darkTheme = ThemeData(
+    useMaterial3: true,
+    brightness: Brightness.dark,
+    scaffoldBackgroundColor: backgroundDark,
+    colorScheme: const ColorScheme.dark(
+      primary: primaryBlue,
+      secondary: accentOrange,
+      surface: surfaceDark,
+    ),
+    appBarTheme: const AppBarTheme(
+      backgroundColor: backgroundDark,
+      foregroundColor: Colors.white,
+      elevation: 0,
+      centerTitle: false,
+    ),
+    cardTheme: CardThemeData(
+      color: surfaceDark,
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+      ),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: const Color(0xFF1E293B),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: accentOrange, width: 1.5),
+      ),
+    ),
+  );
 }
