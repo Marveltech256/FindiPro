@@ -1,11 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../core/config/supabase_config.dart';
+import '../core/utils/uuid_utils.dart';
 
 class GoogleAuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: <String>['email', 'profile']);
 
   Future<UserCredential?> signInWithGoogle() async {
@@ -22,25 +22,34 @@ class GoogleAuthService {
     final user = result.user;
     if (user == null) return null;
 
-    final ref = _db.collection('users').doc(user.uid);
-    final existing = await ref.get();
-    final data = <String, dynamic>{
-      'uid': user.uid,
-      'name': user.displayName ?? '',
+    final userUuid = UuidUtils.firebaseUidToUuid(user.uid);
+    final supabaseProfileData = {
+      'id': userUuid,
+      'full_name': user.displayName ?? '',
       'email': user.email ?? '',
-      'photoUrl': user.photoURL,
-      'emailVerified': user.emailVerified,
-      'fcmToken': await FirebaseMessaging.instance.getToken(),
-      'updatedAt': FieldValue.serverTimestamp(),
+      'phone': user.phoneNumber ?? '',
+      'avatar_url': user.photoURL,
+      'role': 'customer',
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
     };
-    if (!existing.exists) {
-      data.addAll({'role': 'client', 'phone': '', 'isBlocked': false, 'createdAt': FieldValue.serverTimestamp()});
+
+    debugPrint('>>> [GoogleAuthService.signInWithGoogle] Syncing Google user to Supabase profiles: $supabaseProfileData');
+
+    try {
+      await SupabaseConfig.client.from('profiles').upsert(supabaseProfileData);
+      debugPrint('>>> [GoogleAuthService.signInWithGoogle] Supabase sync SUCCESS');
+    } catch (e) {
+      debugPrint('>>> [GoogleAuthService.signInWithGoogle] Supabase sync error: $e');
     }
-    await ref.set(data, SetOptions(merge: true));
+
     return result;
   }
 
   Future<void> signOut() async {
+    try {
+      await SupabaseConfig.client.auth.signOut();
+    } catch (_) {}
     await _googleSignIn.signOut();
     await _auth.signOut();
   }

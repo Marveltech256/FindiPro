@@ -22,25 +22,94 @@ class _RegisterProviderScreenState extends State<RegisterProviderScreen> {
   final _picker=ImagePicker(); final _auth=AuthService(); final _storage=StorageService(); final _users=UserRepository(); final _locationService=LocationService();
 
   @override void dispose(){ for(final c in [_name,_email,_phone,_location,_about,_price,_skills,_business,_years,_password,_confirm]){c.dispose();} super.dispose(); }
-  Future<void> _pickImage() async { final x=await _picker.pickImage(source: ImageSource.gallery,imageQuality:85,maxWidth:1600,maxHeight:1600); if(x!=null)setState(()=>_image=File(x.path)); }
+  Future<void> _pickImage() async {
+    try {
+      final x = await _picker.pickImage(source: ImageSource.gallery);
+      if (x != null && mounted) {
+        setState(() => _image = File(x.path));
+      }
+    } catch (e) {
+      debugPrint('>>> [RegisterProviderScreen._pickImage] Error: $e');
+    }
+  }
 
   Future<void> _register() async {
     if(!_formKey.currentState!.validate())return;
     setState(()=>_loading=true);
     try {
-      final credential=await _auth.register(name:_name.text,email:_email.text,phone:_phone.text,password:_password.text,role:'provider');
+      final credential=await _auth.register(
+        name:_name.text.trim(),
+        email:_email.text.trim(),
+        phone:_phone.text.trim(),
+        password:_password.text,
+        role:'provider',
+      );
       final uid=credential.user!.uid;
       String? photoUrl;
-      if(_image!=null){try{photoUrl=await _storage.uploadImage(file:_image!,path:'providers/$uid/profile/profile.jpg');}catch(_){}}
+      bool photoUploadFailed = false;
+
+      if(_image!=null){
+        try{
+          photoUrl=await _storage.uploadAvatar(
+            uid:uid,
+            file:_image!,
+          );
+        }catch(e){
+          debugPrint('Provider photo upload error: $e');
+          photoUploadFailed = true;
+        }
+      }
+
       Position? pos;
       try { pos=await _locationService.getCurrentLocation(); } catch (_) {}
       final skills=_skills.text.split(',').map((s)=>s.trim()).where((s)=>s.isNotEmpty).toList();
-      await _users.createProvider(uid:uid,name:_name.text.trim(),email:_email.text.trim(),phone:_phone.text.trim(),category:_category!,location:_location.text.trim(),yearsExperience:int.tryParse(_years.text.trim())??0,about:_about.text.trim(),bio:_about.text.trim(),skills:skills,priceRange:_price.text.trim(),available:true,latitude:pos?.latitude,longitude:pos?.longitude,photoUrl:photoUrl,businessName:_business.text.trim().isEmpty?null:_business.text.trim());
-      if(mounted){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Provider account created. Your profile is pending approval.')));Navigator.pop(context);}
-    } on FirebaseAuthException catch(e){if(mounted)_show(e.message??'Registration failed.');}
-    catch(e){if(mounted)_show('Registration failed. If you selected a photo, confirm Firebase Storage is enabled.');}
-    finally{if(mounted)setState(()=>_loading=false);}
+
+      await _users.createProvider(
+        uid:uid,
+        name:_name.text.trim(),
+        email:_email.text.trim(),
+        phone:_phone.text.trim(),
+        category:_category!,
+        location:_location.text.trim(),
+        yearsExperience:int.tryParse(_years.text.trim())??0,
+        about:_about.text.trim(),
+        bio:_about.text.trim(),
+        skills:skills,
+        priceRange:_price.text.trim(),
+        available:true,
+        latitude:pos?.latitude,
+        longitude:pos?.longitude,
+        photoUrl:photoUrl,
+        businessName:_business.text.trim().isEmpty?null:_business.text.trim(),
+      );
+
+      if(mounted){
+        if (photoUploadFailed) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Provider account created. Your profile photo could not be uploaded. You can add it later from Edit Profile.'),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Account created successfully!'),
+            ),
+          );
+        }
+        Navigator.pop(context);
+      }
+    } on FirebaseAuthException catch(e){
+      debugPrint('FirebaseAuthException in provider reg: ${e.code} - ${e.message}');
+      if(mounted)_show(e.message??'Unable to create your account. Please check your details and try again.');
+    } catch(e){
+      debugPrint('Provider registration error: $e');
+      if(mounted)_show("We couldn't finish setting up your profile. Please try again.");
+    } finally{
+      if(mounted)setState(()=>_loading=false);
+    }
   }
+
   void _show(String s)=>ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(s)));
 
   @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:const Text('Become a Service Provider')),body:SafeArea(child:Form(key:_formKey,child:ListView(padding:const EdgeInsets.all(24),children:[

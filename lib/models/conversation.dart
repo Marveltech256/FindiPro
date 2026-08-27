@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 /// Represents a conversation between two users (a client and a provider).
 class Conversation {
   final String id;
@@ -9,14 +7,14 @@ class Conversation {
   final List<String> participants;
   final String lastMessage;
   final String lastMessageSenderId;
-  final Timestamp lastMessageAt;
+  final DateTime lastMessageAt;
   final int clientUnreadCount;
   final int providerUnreadCount;
   final bool isBlocked;
   final String? blockedBy;
-  final Timestamp createdAt;
+  final DateTime createdAt;
 
-  // These fields are not in Firestore but are populated from the 'users' collection.
+  // Populated dynamically from profiles
   String otherParticipantName = '';
   String otherParticipantPhotoUrl = '';
 
@@ -36,41 +34,51 @@ class Conversation {
     required this.createdAt,
   });
 
-  /// Creates a Conversation from a Firestore document.
-  factory Conversation.fromFirestore(DocumentSnapshot doc) {
-    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+  factory Conversation.fromMap(Map<String, dynamic> data, [String? fallbackId]) {
+    DateTime parseDate(dynamic d) {
+      if (d is DateTime) return d;
+      if (d is String) return DateTime.tryParse(d) ?? DateTime.now();
+      return DateTime.now();
+    }
+
+    final cId = (data['client_id'] ?? data['clientId'] ?? '').toString();
+    final pId = (data['provider_id'] ?? data['providerId'] ?? '').toString();
+    final participantsList = data['participants'] != null
+        ? List<String>.from(data['participants'])
+        : [cId, pId].where((s) => s.isNotEmpty).toList();
+
     return Conversation(
-      id: doc.id,
-      bookingId: data['bookingId'] ?? '',
-      clientId: data['clientId'] ?? '',
-      providerId: data['providerId'] ?? '',
-      participants: List<String>.from(data['participants'] ?? []),
-      lastMessage: data['lastMessage'] ?? '',
-      lastMessageSenderId: data['lastMessageSenderId'] ?? '',
-      lastMessageAt: data['lastMessageAt'] ?? Timestamp.now(),
-      clientUnreadCount: data['clientUnreadCount'] ?? 0,
-      providerUnreadCount: data['providerUnreadCount'] ?? 0,
-      isBlocked: data['isBlocked'] ?? false,
-      blockedBy: data['blockedBy'],
-      createdAt: data['createdAt'] ?? Timestamp.now(),
+      id: (data['id'] ?? fallbackId ?? '').toString(),
+      bookingId: (data['booking_id'] ?? data['bookingId'] ?? '').toString(),
+      clientId: cId,
+      providerId: pId,
+      participants: participantsList,
+      lastMessage: (data['last_message'] ?? data['lastMessage'] ?? '').toString(),
+      lastMessageSenderId: (data['last_message_sender_id'] ?? data['lastMessageSenderId'] ?? '').toString(),
+      lastMessageAt: parseDate(data['last_message_at'] ?? data['lastMessageAt']),
+      clientUnreadCount: (data['client_unread_count'] ?? data['clientUnreadCount'] as num?)?.toInt() ?? 0,
+      providerUnreadCount: (data['provider_unread_count'] ?? data['providerUnreadCount'] as num?)?.toInt() ?? 0,
+      isBlocked: data['is_blocked'] == true || data['isBlocked'] == true,
+      blockedBy: data['blocked_by']?.toString() ?? data['blockedBy']?.toString(),
+      createdAt: parseDate(data['created_at'] ?? data['createdAt']),
     );
   }
 
-  /// Converts a Conversation object into a map for Firestore.
-  Map<String, dynamic> toFirestore() {
+  Map<String, dynamic> toMap() {
     return {
-      'bookingId': bookingId,
-      'clientId': clientId,
-      'providerId': providerId,
+      'id': id,
+      'booking_id': bookingId,
+      'client_id': clientId,
+      'provider_id': providerId,
       'participants': participants,
-      'lastMessage': lastMessage,
-      'lastMessageSenderId': lastMessageSenderId,
-      'lastMessageAt': lastMessageAt,
-      'clientUnreadCount': clientUnreadCount,
-      'providerUnreadCount': providerUnreadCount,
-      'isBlocked': isBlocked,
-      'blockedBy': blockedBy,
-      'createdAt': createdAt,
+      'last_message': lastMessage,
+      'last_message_sender_id': lastMessageSenderId,
+      'last_message_at': lastMessageAt.toIso8601String(),
+      'client_unread_count': clientUnreadCount,
+      'provider_unread_count': providerUnreadCount,
+      'is_blocked': isBlocked,
+      'blocked_by': blockedBy,
+      'created_at': createdAt.toIso8601String(),
     };
   }
 }

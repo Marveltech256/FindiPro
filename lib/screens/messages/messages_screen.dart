@@ -1,6 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-
 import '../../models/conversation.dart';
 import '../../repositories/message_repository.dart';
 import '../../widgets/empty_state.dart';
@@ -9,16 +8,58 @@ import '../chat_screen.dart';
 class MessagesScreen extends StatelessWidget {
   const MessagesScreen({super.key});
 
+  String _formatConversationTime(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final messageDate = DateTime(dt.year, dt.month, dt.day);
+
+    if (messageDate == today) {
+      final hour = dt.hour.toString().padLeft(2, '0');
+      final minute = dt.minute.toString().padLeft(2, '0');
+      return '$hour:$minute';
+    } else if (today.difference(messageDate).inDays == 1) {
+      return 'Yesterday';
+    } else {
+      return '${dt.day}/${dt.month}/${dt.year}';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
+    // React to auth state instead of checking currentUser once. This
+    // screen lives inside an IndexedStack that only builds once at
+    // startup, so a one-time synchronous check can permanently miss a
+    // session that finishes restoring a moment later.
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      initialData: FirebaseAuth.instance.currentUser,
+      builder: (context, authSnapshot) {
+        final user = authSnapshot.data;
 
-    if (user == null) {
-      return const Scaffold(
-        body: EmptyState(icon: Icons.message_outlined, title: 'Login Required', subtitle: 'Please log in to view your messages.'),
-      );
-    }
+        if (user == null) {
+          return const Scaffold(
+            body: EmptyState(
+              icon: Icons.message_outlined,
+              title: 'Login Required',
+              subtitle: 'Please log in to view your messages.',
+            ),
+          );
+        }
 
+        return _MessagesList(user: user, formatTime: _formatConversationTime);
+      },
+    );
+  }
+}
+
+class _MessagesList extends StatelessWidget {
+  final User user;
+  final String Function(DateTime) formatTime;
+
+  const _MessagesList({required this.user, required this.formatTime});
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Messages'),
@@ -28,7 +69,7 @@ class MessagesScreen extends StatelessWidget {
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(),
+              child: CircularProgressIndicator.adaptive(),
             );
           }
 
@@ -85,6 +126,8 @@ class MessagesScreen extends StatelessWidget {
             separatorBuilder: (_, __) => const SizedBox(height: 8),
             itemBuilder: (context, index) {
               final conversation = conversations[index];
+              final hasUnread = conversation.clientUnreadCount > 0;
+              final hasPhoto = conversation.otherParticipantPhotoUrl.isNotEmpty;
 
               return Card(
                 child: ListTile(
@@ -92,45 +135,108 @@ class MessagesScreen extends StatelessWidget {
                     horizontal: 16,
                     vertical: 8,
                   ),
-                  leading: CircleAvatar(
-                    radius: 26,
-                    backgroundImage:
-                        conversation.otherParticipantPhotoUrl.isNotEmpty
-                            ? NetworkImage(
-                                conversation.otherParticipantPhotoUrl,
-                              )
-                            : null,
-                    child:
-                        conversation.otherParticipantPhotoUrl.isEmpty
-                            ? const Icon(Icons.person)
-                            : null,
-                  ),
-                  title: Text(
-                    conversation.otherParticipantName.isNotEmpty
-                        ? conversation.otherParticipantName
-                        : 'User',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
+                  leading: ClipOval(
+                    child: SizedBox(
+                      width: 52,
+                      height: 52,
+                      child: hasPhoto
+                          ? Image.network(
+                              conversation.otherParticipantPhotoUrl,
+                              width: 52,
+                              height: 52,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                color: Colors.grey.shade200,
+                                child: const Icon(Icons.person, size: 28, color: Colors.grey),
+                              ),
+                            )
+                          : Container(
+                              color: Colors.grey.shade200,
+                              child: const Icon(Icons.person, size: 28, color: Colors.grey),
+                            ),
                     ),
                   ),
-                  subtitle: Text(
-                    conversation.lastMessage.isNotEmpty
-                        ? conversation.lastMessage
-                        : 'Start a conversation',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          conversation.otherParticipantName.isNotEmpty
+                              ? conversation.otherParticipantName
+                              : 'User',
+                          style: TextStyle(
+                            fontWeight: hasUnread ? FontWeight.w800 : FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        formatTime(conversation.lastMessageAt),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: hasUnread ? const Color(0xFF06B6D4) : Colors.grey,
+                          fontWeight: hasUnread ? FontWeight.w700 : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            conversation.lastMessage.isNotEmpty
+                                ? conversation.lastMessage
+                                : 'Start a conversation',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: hasUnread
+                                  ? Theme.of(context).colorScheme.onSurface
+                                  : Theme.of(context).colorScheme.onSurfaceVariant,
+                              fontWeight: hasUnread ? FontWeight.w600 : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                        if (hasUnread)
+                          Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF06B6D4),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '${conversation.clientUnreadCount}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                   trailing: const Icon(
                     Icons.chevron_right,
+                    size: 20,
                   ),
                   onTap: () {
+                    final otherUserId = conversation.clientId == user.uid
+                        ? conversation.providerId
+                        : conversation.clientId;
+
                     Navigator.push(
                       context,
                       MaterialPageRoute(
                         builder: (_) => ChatScreen(
                           conversationId: conversation.id,
                           currentUserId: user.uid,
-                          otherUserId: conversation.clientId == user.uid ? conversation.providerId : conversation.clientId,
+                          otherUserId: otherUserId,
+                          otherUserName: conversation.otherParticipantName,
+                          otherUserPhotoUrl: conversation.otherParticipantPhotoUrl,
                         ),
                       ),
                     );

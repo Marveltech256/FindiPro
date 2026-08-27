@@ -33,13 +33,17 @@ class _SavedScreenState extends State<SavedScreen>{List<String> _ids=[];bool _lo
                 : StreamBuilder<List<UserModel>>(
                     stream: UserRepository().getProvidersStream(),
                     builder: (context, s) {
-                      if (!s.hasData) return const Center(child: CircularProgressIndicator());
+                      if (!s.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
                       final list = s.data!.where((p) => _ids.contains(p.uid)).toList();
-                      if (list.isEmpty) return const EmptyState(
-                        icon: Icons.bookmark_remove_outlined,
-                        title: 'Providers Not Found',
-                        subtitle: 'Your saved providers may no longer be available.',
-                      );
+                      if (list.isEmpty) {
+                        return const EmptyState(
+                          icon: Icons.bookmark_remove_outlined,
+                          title: 'Providers Not Found',
+                          subtitle: 'Your saved providers may no longer be available.',
+                        );
+                      }
                       return ListView.separated(
                           padding: const EdgeInsets.all(16),
                           itemCount: list.length,
@@ -47,10 +51,17 @@ class _SavedScreenState extends State<SavedScreen>{List<String> _ids=[];bool _lo
                           itemBuilder: (context, i) {
                             final p = list[i];
                             return ListTile(
-                                tileColor: Colors.white,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                                 leading: CircleAvatar(backgroundImage: p.photoUrl == null ? null : NetworkImage(p.photoUrl!), child: p.photoUrl == null ? const Icon(Icons.person) : null),
-                                title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                title: Row(
+                                  children: [
+                                    Expanded(child: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700))),
+                                    if (p.isPremiumBadge)
+                                      const Icon(Icons.stars, color: Color(0xFFD97706), size: 18)
+                                    else if (p.isVerifiedBadge)
+                                      const Icon(Icons.verified, color: Colors.blue, size: 18),
+                                  ],
+                                ),
                                 subtitle: Text(p.category ?? ''),
                                 trailing: IconButton(
                                     icon: const Icon(Icons.delete_outline),

@@ -39,9 +39,13 @@ class _RegisterClientScreenState extends State<RegisterClientScreen> {
   }
 
   Future<void> _pickImage() async {
-    final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85, maxWidth: 1600, maxHeight: 1600);
-    if (picked != null) {
-      setState(() => _image = File(picked.path));
+    try {
+      final picked = await _picker.pickImage(source: ImageSource.gallery);
+      if (picked != null && mounted) {
+        setState(() => _image = File(picked.path));
+      }
+    } catch (e) {
+      debugPrint('>>> [RegisterClientScreen._pickImage] Error: $e');
     }
   }
 
@@ -49,25 +53,58 @@ class _RegisterClientScreenState extends State<RegisterClientScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     try {
-      final credential = await _auth.register(name: _name.text, email: _email.text, phone: _phone.text, password: _password.text);
+      final credential = await _auth.register(
+        name: _name.text.trim(),
+        email: _email.text.trim(),
+        phone: _phone.text.trim(),
+        password: _password.text,
+      );
       final uid = credential.user!.uid;
       String? photoUrl;
+      bool photoUploadFailed = false;
+
       if (_image != null) {
         try {
-          photoUrl = await _storage.uploadImage(file: _image!, path: 'users/$uid/profile/profile.jpg');
-        } catch (_) {
-          // Silently fail on image upload, but proceed with registration
+          photoUrl = await _storage.uploadAvatar(
+            uid: uid,
+            file: _image!,
+          );
+        } catch (e) {
+          debugPrint('Profile photo upload error: $e');
+          photoUploadFailed = true;
         }
       }
-      await _users.createClient(uid: uid, name: _name.text.trim(), email: _email.text.trim(), phone: _phone.text.trim(), photoUrl: photoUrl);
+
+      await _users.createClient(
+        uid: uid,
+        name: _name.text.trim(),
+        email: _email.text.trim(),
+        phone: _phone.text.trim(),
+        photoUrl: photoUrl,
+      );
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Account created successfully.')));
+        if (photoUploadFailed) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Account created successfully. Your profile photo could not be uploaded. You can add it later from Edit Profile.',
+              ),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Account created successfully!')),
+          );
+        }
         Navigator.pop(context);
       }
     } on FirebaseAuthException catch (e) {
-      if (mounted) _show(e.message ?? 'Registration failed.');
+      debugPrint('FirebaseAuthException: ${e.code} - ${e.message}');
+      if (mounted) _show(e.message ?? 'Unable to create your account. Please check your details and try again.');
     } catch (e) {
-      if (mounted) _show('Registration failed. Make sure Firebase Storage is enabled if you selected a photo.');
+      debugPrint('Registration error: $e');
+      if (mounted) _show("We couldn't finish setting up your profile. Please try again.");
     } finally {
       if (mounted) setState(() => _loading = false);
     }
