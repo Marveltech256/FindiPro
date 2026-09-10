@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Account Deletion & Data Retention — FindiPro</title>
+  <style>
+    :root {
+      --primary: #0891B2;
+      --primary-dark: #0E7490;
+      --primary-light: #E0F2FE;
+      --danger: #DC2626;
+      --danger-bg: #FEF2F2;
+      --text: #0F172A;
+      --text-muted: #475569;
+      --border: #E2E8F0;
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--bg);
+      padding: 24px 16px;
+    }
+    .container {
+      max-width: 760px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      border-radius: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    header {
+      background: linear-gradient(135deg, #0891B2, #0E7490);
+      color: #FFFFFF;
+      padding: 36px 32px;
+      text-align: center;
+    }
+    header h1 { font-size: 26px; font-weight: 800; margin-bottom: 8px; }
+    header p { font-size: 15px; opacity: 0.95; }
+    .content { padding: 36px 32px; }
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      margin: 28px 0 12px 0;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--primary-light);
+    }
+    h2:first-of-type { margin-top: 0; }
+    p { margin-bottom: 14px; font-size: 15px; color: var(--text-muted); }
+    ul, ol { margin-left: 20px; margin-bottom: 16px; color: var(--text-muted); font-size: 15px; }
+    li { margin-bottom: 8px; }
+    .card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin: 18px 0;
+    }
+    .card-danger {
+      background: var(--danger-bg);
+      border-color: #FECACA;
+    }
+    .card-danger h3 { color: var(--danger); font-size: 17px; margin-bottom: 8px; }
+    .card-primary {
+      background: #F0FDF4;
+      border-color: #BBF7D0;
+    }
+    .card-primary h3 { color: #15803D; font-size: 17px; margin-bottom: 8px; }
+    .btn {
+      display: inline-block;
+      background: var(--primary);
+      color: #FFFFFF;
+      text-decoration: none;
+      font-weight: 600;
+      padding: 12px 24px;
+      border-radius: 8px;
+      margin-top: 10px;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: var(--primary-dark); }
+    .badge {
+      display: inline-block;
+      background: var(--primary-light);
+      color: var(--primary-dark);
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 20px 32px;
+      text-align: center;
+      font-size: 13px;
+      color: #94A3B8;
+      background: #FAFAFA;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px 14px;
+      text-align: left;
+    }
+    th { background: #F1F5F9; color: var(--text); font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <h1>FindiPro</h1>
+    <p>Account & Data Deletion Policy</p>
+  </header>
+
+  <div class="content">
+    <span class="badge">Google Play Compliance</span>
+    <h2>Overview</h2>
+    <p>
+      At <strong>FindiPro</strong>, we respect your privacy and provide full control over your personal data. In compliance with Google Play Store policies and international data protection laws (including GDPR and CCPA), FindiPro users can permanently delete their account and all associated personal data at any time.
+    </p>
+
+    <h2>Method 1: Delete Directly in the FindiPro App (Instant)</h2>
+    <p>You can delete your account and personal data instantly from within the Android application:</p>
+    <div class="card">
+      <ol>
+        <li>Open the <strong>FindiPro</strong> app on your device.</li>
+        <li>Log in to your account if you are not already signed in.</li>
+        <li>Tap the <strong>Profile</strong> tab in the bottom navigation bar.</li>
+        <li>Tap the <strong>Settings</strong> icon (gear icon) at the top right.</li>
+        <li>Scroll down to the <strong>Danger Zone</strong> section.</li>
+        <li>Tap <strong>Delete Account</strong>.</li>
+        <li>Confirm your decision when prompted.</li>
+      </ol>
+    </div>
+    <p><em>Upon confirmation, your Firebase authentication record is immediately deleted, your Supabase profile is purged/anonymized, and your device push tokens are deactivated.</em></p>
+
+    <h2>Method 2: Request Deletion via Web / Email (No App Required)</h2>
+    <p>If you have already uninstalled the application or cannot access your mobile device, you can submit a deletion request by email:</p>
+    <div class="card card-primary">
+      <h3>Submit an Email Request</h3>
+      <p>Send an email to our data privacy team with the following details:</p>
+      <ul>
+        <li><strong>Email Address:</strong> <a href="mailto:atalyebamarvin4@gmail.com?subject=Account%20Deletion%20Request%20-%20FindiPro">atalyebamarvin4@gmail.com</a> (or <a href="mailto:atalyebamarvin4@gmail.com?subject=Account%20Deletion%20Request%20-%20FindiPro">atalyebamarvin4@gmail.com</a>)</li>
+        <li><strong>Subject:</strong> <code>Account Deletion Request - FindiPro</code></li>
+        <li><strong>Body:</strong> Please specify your registered email address and phone number.</li>
+      </ul>
+      <p style="margin-top: 8px; font-size: 13px; color: #166534;">
+        ✓ Requests are processed and permanently completed within <strong>30 days</strong> of verification.
+      </p>
+      <a class="btn" href="mailto:atalyebamarvin4@gmail.com?subject=Account%20Deletion%20Request%20-%20FindiPro">Email Privacy Team</a>
+    </div>
+
+    <h2>What Data Is Permanently Deleted?</h2>
+    <p>When an account deletion request is finalized, the following categories of data are permanently and irreversibly removed from our servers:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Data Category</th>
+          <th>Specific Items Deleted</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Account Credentials</strong></td>
+          <td>Firebase Authentication UID, email address, password hash, Google Sign-in association tokens.</td>
+        </tr>
+        <tr>
+          <td><strong>Profile Data</strong></td>
+          <td>Full name, phone number, bio, avatar profile pictures, role (client/provider).</td>
+        </tr>
+        <tr>
+          <td><strong>Provider Listings</strong></td>
+          <td>Business names, service categories, pricing information, skills, years of experience.</td>
+        </tr>
+        <tr>
+          <td><strong>Media & Portfolio</strong></td>
+          <td>All portfolio images uploaded by service providers, National ID verification photos.</td>
+        </tr>
+        <tr>
+          <td><strong>Communications</strong></td>
+          <td>In-app chat history, direct messages, sent images, and notification history.</td>
+        </tr>
+        <tr>
+          <td><strong>Device & Push Tokens</strong></td>
+          <td>FCM push notification tokens, device identifiers, and presence/online tracking records.</td>
+        </tr>
+        <tr>
+          <td><strong>Location Information</strong></td>
+          <td>GPS coordinates, saved service addresses, and geographic mapping entries.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Data Retention Exceptions (What We May Keep & Why)</h2>
+    <div class="card card-danger">
+      <h3>Statutory & Security Retention</h3>
+      <p>In strict accordance with applicable laws, certain limited records may be retained temporarily:</p>
+      <ul>
+        <li><strong>Financial & Transaction Records:</strong> If you engaged in paid subscriptions or bookings, basic transactional logs (amounts, dates, references) are retained for up to <strong>7 years</strong> strictly to comply with tax, statutory accounting, and anti-fraud regulations.</li>
+        <li><strong>Dispute & Abuse Prevention:</strong> Anonymized cryptographic hashes may be kept for up to <strong>90 days</strong> to prevent banned bad actors from immediately recreating fraudulent accounts.</li>
+      </ul>
+    </div>
+
+    <h2>Contact Us</h2>
+    <p>For any questions regarding our account deletion procedures or privacy practices, please contact:</p>
+    <p>
+      <strong>Developer:</strong> Atalyeba Marvin / Marveltech256<br>
+      <strong>App:</strong> FindiPro (Package: <code>com.findipro.com</code>)<br>
+      <strong>Email:</strong> <a href="mailto:atalyebamarvin4@gmail.com">atalyebamarvin4@gmail.com</a> / <a href="mailto:atalyebamarvin4@gmail.com">atalyebamarvin4@gmail.com</a><br>
+      <strong>Official Repository:</strong> <a href="https://github.com/Marveltech256/FindiPro" target="_blank" rel="noopener">github.com/Marveltech256/FindiPro</a>
+    </p>
+  </div>
+
+  <footer>
+    &copy; 2026 FindiPro. All rights reserved. Connecting trusted professionals with customers worldwide.
+  </footer>
+</div>
+
+</body>
+</html>
