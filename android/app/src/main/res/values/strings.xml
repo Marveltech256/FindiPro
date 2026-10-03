@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FindiPro</string>
+    <string name="widget_title">FindiPro - Find Services</string>
+    <string name="widget_search_hint">Search 50+ services near you...</string>
+    <string name="widget_plumbing">Plumbing</string>
+    <string name="widget_electrical">Electrical</string>
+    <string name="widget_cleaning">Cleaning</string>
+    <string name="widget_mechanic">Mechanic</string>
+</resources>
+

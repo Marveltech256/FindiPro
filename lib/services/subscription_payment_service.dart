@@ -6,6 +6,7 @@ import '../models/subscription_model.dart';
 import '../repositories/notification_repository.dart';
 import '../repositories/subscription_repository.dart';
 import 'provider_entitlement_service.dart';
+import 'push_notification_service.dart';
 
 enum PaymentResultStatus {
   success,
@@ -198,6 +199,46 @@ class SubscriptionPaymentService {
 
       if (!gatewayVerified) {
         debugPrint('>>> [SubscriptionPaymentService] Gateway verification failed for $transactionRef');
+        
+        // Dispatch payment_failed push notification (non-fatal)
+        try {
+          final planDisplayName = normPlan == 'premium' ? 'FindiPro Premium' : 'FindiPro Verified';
+          final notifTitle = 'Payment Failed';
+          final notifBody = 'Your payment of $currency $amount for $planDisplayName could not be verified. Please try again.';
+
+          await _notifRepo.createNotification(
+            userId: providerId,
+            title: notifTitle,
+            body: notifBody,
+            type: 'payment_failed',
+            data: {
+              'plan': normPlan,
+              'billing_period': normBilling,
+              'amount': amount,
+              'currency': currency,
+              'transaction_reference': transactionRef,
+            },
+          );
+
+          await PushNotificationService().sendPushNotificationToUser(
+            recipientUserId: providerId,
+            senderUserId: 'system',
+            title: notifTitle,
+            body: notifBody,
+            type: 'payment_failed',
+            extraData: {
+              'plan': normPlan,
+              'billing_period': normBilling,
+              'amount': amount,
+              'currency': currency,
+              'transaction_reference': transactionRef,
+              'status': 'failed',
+            },
+          );
+        } catch (e) {
+          debugPrint('>>> [SubscriptionPaymentService] Payment failure notification note (non-fatal): $e');
+        }
+
         return PaymentResult(
           status: PaymentResultStatus.failed,
           transactionReference: transactionRef,
@@ -238,14 +279,17 @@ class SubscriptionPaymentService {
         );
       }
 
-      // 8. Dispatch in-app notification to provider
+      // 8. Dispatch in-app notification & FCM push notification to provider
       try {
         final planDisplayName = normPlan == 'premium' ? 'FindiPro Premium' : 'FindiPro Verified';
+        final notifTitle = 'Payment Successful 🎉';
+        final notifBody = 'Your payment of $currency $amount for $planDisplayName was successful. Subscription is now active until ${expiresAt.day}/${expiresAt.month}/${expiresAt.year}.';
+
         await _notifRepo.createNotification(
           userId: providerId,
-          title: 'Subscription Activated 🎉',
-          body: 'Your $planDisplayName subscription is now active until ${expiresAt.day}/${expiresAt.month}/${expiresAt.year}.',
-          type: 'subscription',
+          title: notifTitle,
+          body: notifBody,
+          type: 'payment_success',
           data: {
             'plan': normPlan,
             'billing_period': normBilling,
@@ -254,8 +298,24 @@ class SubscriptionPaymentService {
             'transaction_reference': transactionRef,
           },
         );
+
+        await PushNotificationService().sendPushNotificationToUser(
+          recipientUserId: providerId,
+          senderUserId: 'system',
+          title: notifTitle,
+          body: notifBody,
+          type: 'payment_success',
+          extraData: {
+            'plan': normPlan,
+            'billing_period': normBilling,
+            'amount': amount,
+            'currency': currency,
+            'transaction_reference': transactionRef,
+            'status': 'success',
+          },
+        );
       } catch (notifErr) {
-        debugPrint('>>> [SubscriptionPaymentService] Notification dispatch note: $notifErr');
+        debugPrint('>>> [SubscriptionPaymentService] Notification dispatch note (non-fatal): $notifErr');
       }
 
       debugPrint('>>> [SubscriptionPaymentService] Subscription activated successfully for $providerId!');

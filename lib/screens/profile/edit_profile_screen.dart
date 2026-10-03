@@ -67,6 +67,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     'Beauty',
     'Construction',
     'IT & Technology',
+    'Household Items',
     'Other',
   ];
 
@@ -85,10 +86,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _loadUser();
   }
 
-  Future<void> _loadUser() async {
+  Future<void> _loadUser({bool force = false}) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid != null) {
-      final u = await _userRepo.getUser(uid);
+      final u = await _userRepo.getUser(uid, forceRefresh: force);
       if (mounted && u != null) {
         setState(() {
           _user = u;
@@ -241,11 +242,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       );
 
       await _userRepo.addPortfolioImage(user.uid, publicUrl);
-      await _loadUser();
+      if (mounted) {
+        setState(() {
+          if (_user != null) {
+            final cur = List<String>.from(_user!.images);
+            if (!cur.contains(publicUrl)) cur.add(publicUrl);
+            _user = _user!.copyWith(images: cur);
+          }
+        });
+      }
+      await _loadUser(force: true);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Portfolio image added successfully.')),
+          const SnackBar(
+            content: Text('✓ Portfolio image uploaded successfully.'),
+            backgroundColor: Color(0xFF10B981),
+          ),
         );
       }
     } catch (e) {
@@ -265,8 +278,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     if (user == null) return;
 
     try {
+      if (mounted) {
+        setState(() {
+          final cur = _user!.images.where((x) => x != url).toList();
+          _user = _user!.copyWith(images: cur);
+        });
+      }
       await _userRepo.removePortfolioImage(user.uid, url);
-      await _loadUser();
+      await _loadUser(force: true);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Photo removed from portfolio.')),

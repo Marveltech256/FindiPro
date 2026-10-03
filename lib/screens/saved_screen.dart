@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../repositories/user_repository.dart';
 import '../services/saved_provider_service.dart';
-import 'Provider/provider_detail_screen.dart';
+import 'provider/provider_detail_screen.dart';
 import '../widgets/empty_state.dart';
 
 class SavedScreen extends StatefulWidget{const SavedScreen({super.key});@override State<SavedScreen> createState()=>_SavedScreenState();}

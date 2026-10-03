@@ -3,25 +3,57 @@ import 'package:geolocator/geolocator.dart';
 import '../models/user_model.dart';
 
 class LocationService {
+  static Position? _cachedPosition;
+  static DateTime? _lastFetchedTime;
+
   Future<Position?> getCurrentLocation() async {
+    // Return cached location if fetched within the last 5 minutes
+    if (_cachedPosition != null &&
+        _lastFetchedTime != null &&
+        DateTime.now().difference(_lastFetchedTime!).inMinutes < 5) {
+      return _cachedPosition;
+    }
+
     try {
-      if (!await Geolocator.isLocationServiceEnabled()) return null;
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        return _cachedPosition ?? await Geolocator.getLastKnownPosition();
+      }
       var permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
       if (permission == LocationPermission.deniedForever) {
-        return Geolocator.getLastKnownPosition();
+        _cachedPosition = await Geolocator.getLastKnownPosition();
+        return _cachedPosition;
       }
-      if (permission == LocationPermission.denied) return null;
-      return await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      if (permission == LocationPermission.denied) return _cachedPosition;
+
+      // Try last known first as fast fallback
+      final lastKnown = await Geolocator.getLastKnownPosition();
+      if (lastKnown != null) {
+        _cachedPosition = lastKnown;
+      }
+
+      // Request fresh location with strict 3.5 second timeout
+      final fresh = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(milliseconds: 3500),
+        ),
+      ).timeout(
+        const Duration(milliseconds: 3500),
+        onTimeout: () => lastKnown ?? _cachedPosition!,
       );
+
+      _cachedPosition = fresh;
+      _lastFetchedTime = DateTime.now();
+      return fresh;
     } catch (_) {
       try {
-        return await Geolocator.getLastKnownPosition();
+        _cachedPosition = await Geolocator.getLastKnownPosition();
+        return _cachedPosition;
       } catch (_) {
-        return null;
+        return _cachedPosition;
       }
     }
   }
@@ -75,8 +107,8 @@ class LocationService {
     final list = List<UserModel>.from(providers);
 
     int getTierScore(UserModel u) {
-      if (u.isPremiumBadge) return 2;
-      if (u.isVerifiedBadge) return 1;
+      if (u.effectivePlan == 'premium' || u.isPremiumBadge) return 2;
+      if (u.isVerifiedBadge || u.effectivePlan == 'verified') return 1;
       return 0;
     }
 

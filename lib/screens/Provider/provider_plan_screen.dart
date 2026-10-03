@@ -1,13 +1,15 @@
+import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../models/user_model.dart';
 import '../../models/verification_request.dart';
 import '../../repositories/user_repository.dart';
 import '../../repositories/verification_repository.dart';
 import '../../services/location_service.dart';
 import '../../services/provider_entitlement_service.dart';
-import '../../services/subscription_payment_service.dart';
+import '../../services/storage_service.dart';
 
 class ProviderPlanScreen extends StatefulWidget {
   const ProviderPlanScreen({super.key});
@@ -19,7 +21,6 @@ class ProviderPlanScreen extends StatefulWidget {
 class _ProviderPlanScreenState extends State<ProviderPlanScreen> {
   final _userRepo = UserRepository();
   final _verifRepo = VerificationRepository();
-  final _paymentService = SubscriptionPaymentService();
   final _locationService = LocationService();
 
   bool _isYearly = false;
@@ -62,17 +63,6 @@ class _ProviderPlanScreenState extends State<ProviderPlanScreen> {
   }
 
   Future<void> _handleSubscribe(String plan) async {
-    final authUid = FirebaseAuth.instance.currentUser?.uid;
-    final user = _currentUser ?? (authUid != null ? await _userRepo.getUser(authUid) : null);
-    if (!mounted) return;
-
-    if (user == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please log in to manage your provider plan.')),
-      );
-      return;
-    }
-
     final price = ProviderEntitlementService.getPlanPrice(
       plan: plan,
       region: _selectedRegion,
@@ -81,12 +71,6 @@ class _ProviderPlanScreenState extends State<ProviderPlanScreen> {
     final billingPeriod = _isYearly ? 'yearly' : 'monthly';
     final planTitle = plan == 'premium' ? 'FindiPro Premium' : 'FindiPro Verified';
     final priceText = _isYearly ? price.formattedYearly : price.formattedMonthly;
-    final availableMethods = _paymentService.getSupportedPaymentMethods(_selectedRegion);
-
-    PaymentMethodOption selectedMethod = availableMethods.first;
-    final phoneController = TextEditingController(text: user.phone.isNotEmpty ? user.phone : '');
-    final formKey = GlobalKey<FormState>();
-    bool isProcessing = false;
 
     showModalBottomSheet(
       context: context,
@@ -96,198 +80,96 @@ class _ProviderPlanScreenState extends State<ProviderPlanScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (modalCtx, setModalState) {
-            final isMobileMoney = selectedMethod.type == PaymentMethodType.mtnMobileMoney ||
-                selectedMethod.type == PaymentMethodType.airtelMoney;
-
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 24,
-                top: 20,
-                left: 20,
-                right: 20,
-              ),
-              child: SingleChildScrollView(
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: Theme.of(ctx).colorScheme.outline.withAlpha(80),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Icon(
-                            plan == 'premium' ? Icons.stars : Icons.verified,
-                            color: plan == 'premium' ? const Color(0xFFD97706) : Colors.blue,
-                            size: 26,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'Subscribe to $planTitle',
-                              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Total: $priceText ($billingPeriod billing, $_selectedRegion region)',
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF06B6D4)),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Select Payment Method:',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      ...availableMethods.map((method) {
-                        final isSelected = selectedMethod.id == method.id;
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: isSelected ? const Color(0xFF06B6D4) : Theme.of(ctx).colorScheme.outline.withAlpha(40),
-                              width: isSelected ? 2 : 1,
-                            ),
-                            borderRadius: BorderRadius.circular(12),
-                            color: isSelected ? const Color(0xFF06B6D4).withAlpha(15) : null,
-                          ),
-                          child: ListTile(
-                            leading: Icon(
-                              method.type == PaymentMethodType.card
-                                  ? Icons.credit_card
-                                  : Icons.phone_android,
-                              color: const Color(0xFF06B6D4),
-                            ),
-                            title: Text(method.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                            subtitle: Text(method.subtitle, style: const TextStyle(fontSize: 12)),
-                            trailing: Icon(
-                              isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-                              color: isSelected ? const Color(0xFF06B6D4) : Colors.grey,
-                            ),
-                            onTap: isProcessing
-                                ? null
-                                : () {
-                                    setModalState(() {
-                                      selectedMethod = method;
-                                    });
-                                  },
-                          ),
-                        );
-                      }),
-                      if (isMobileMoney) ...[
-                        const SizedBox(height: 8),
-                        TextFormField(
-                          controller: phoneController,
-                          keyboardType: TextInputType.phone,
-                          decoration: InputDecoration(
-                            labelText: '${selectedMethod.title} Phone Number',
-                            hintText: 'e.g. 0771234567 or +256771234567',
-                            prefixIcon: const Icon(Icons.phone),
-                            border: const OutlineInputBorder(),
-                          ),
-                          validator: (val) {
-                            if (val == null || val.trim().length < 9) {
-                              return 'Please enter a valid mobile money number';
-                            }
-                            return null;
-                          },
-                        ),
-                      ],
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: plan == 'premium' ? const Color(0xFFD97706) : const Color(0xFF06B6D4),
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          onPressed: isProcessing
-                              ? null
-                              : () async {
-                                  if (isMobileMoney && !formKey.currentState!.validate()) {
-                                    return;
-                                  }
-                                  setModalState(() => isProcessing = true);
-
-                                  try {
-                                    final res = await _paymentService.processSubscriptionPayment(
-                                      providerId: user.uid,
-                                      providerName: user.name,
-                                      providerEmail: user.email,
-                                      plan: plan,
-                                      billingPeriod: billingPeriod,
-                                      region: _selectedRegion,
-                                      paymentMethod: selectedMethod.type,
-                                      phoneNumber: phoneController.text.trim(),
-                                    );
-
-                                    if (modalCtx.mounted) {
-                                      Navigator.pop(modalCtx);
-                                    }
-
-                                    if (!mounted) return;
-
-                                    if (res.isSuccessful) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text('$planTitle activated successfully!'),
-                                          backgroundColor: Colors.green,
-                                        ),
-                                      );
-                                      _loadUser();
-                                    } else {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(res.errorMessage ?? 'Payment failed. Please try again.'),
-                                          backgroundColor: Colors.red,
-                                        ),
-                                      );
-                                    }
-                                  } catch (e) {
-                                    if (modalCtx.mounted) {
-                                      setModalState(() => isProcessing = false);
-                                    }
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Payment error: $e')),
-                                      );
-                                    }
-                                  }
-                                },
-                          child: isProcessing
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                                )
-                              : Text(
-                                  'Pay $priceText',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                                ),
-                        ),
-                      ),
-                    ],
-                  ),
+        return Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 44,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(ctx).colorScheme.outline.withAlpha(80),
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-            );
-          },
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withAlpha(30),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  plan == 'premium' ? Icons.stars : Icons.verified,
+                  size: 44,
+                  color: plan == 'premium' ? const Color(0xFFD97706) : Colors.blue,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '$planTitle Subscription',
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Price: $priceText ($billingPeriod billing, $_selectedRegion region)',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF06B6D4)),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withAlpha(25),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.amber.shade600, width: 0.8),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.hourglass_top, color: Colors.amber.shade900, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'In-App Payments Coming Soon!',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.amber.shade900,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Automated digital subscription payments (MTN Mobile Money, Airtel Money, Cards) are currently being finalized for launch. You will be able to upgrade directly within the app very soon!',
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.4,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF06B6D4),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Got It', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -298,11 +180,62 @@ class _ProviderPlanScreenState extends State<ProviderPlanScreen> {
     if (user == null) return;
 
     final idNumberController = TextEditingController(text: previousRequest?.nationalIdNumber ?? '');
-    final idFrontController = TextEditingController(text: previousRequest?.idFrontUrl ?? '');
-    final idBackController = TextEditingController(text: previousRequest?.idBackUrl ?? '');
-    final businessDocController = TextEditingController(text: previousRequest?.businessDocUrl ?? '');
     final formKey = GlobalKey<FormState>();
+    final picker = ImagePicker();
+    final storage = StorageService();
+
+    File? idFrontFile;
+    File? idBackFile;
+    File? businessDocFile;
+    String? existingFrontUrl = previousRequest?.idFrontUrl;
+    String? existingBackUrl = previousRequest?.idBackUrl;
+    String? existingDocUrl = previousRequest?.businessDocUrl;
     bool isSubmitting = false;
+
+    Future<void> pickDoc(void Function(File) onSelected) async {
+      showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (sheetCtx) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.camera_alt_outlined, color: Color(0xFF06B6D4)),
+                  title: const Text('Take Photo with Camera', style: TextStyle(fontWeight: FontWeight.bold)),
+                  onTap: () async {
+                    Navigator.pop(sheetCtx);
+                    try {
+                      final x = await picker.pickImage(source: ImageSource.camera, imageQuality: 85);
+                      if (x != null) onSelected(File(x.path));
+                    } catch (e) {
+                      debugPrint('Camera error: $e');
+                    }
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_library_outlined, color: Color(0xFF06B6D4)),
+                  title: const Text('Choose from Photo Gallery', style: TextStyle(fontWeight: FontWeight.bold)),
+                  onTap: () async {
+                    Navigator.pop(sheetCtx);
+                    try {
+                      final x = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+                      if (x != null) onSelected(File(x.path));
+                    } catch (e) {
+                      debugPrint('Gallery error: $e');
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     showModalBottomSheet(
       context: context,
@@ -314,6 +247,8 @@ class _ProviderPlanScreenState extends State<ProviderPlanScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (modalCtx, setModalState) {
+            final theme = Theme.of(modalCtx);
+
             return Padding(
               padding: EdgeInsets.only(
                 bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 24,
@@ -333,7 +268,7 @@ class _ProviderPlanScreenState extends State<ProviderPlanScreen> {
                           width: 40,
                           height: 4,
                           decoration: BoxDecoration(
-                            color: Theme.of(ctx).colorScheme.outline.withAlpha(80),
+                            color: theme.colorScheme.outline.withAlpha(80),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
@@ -353,8 +288,8 @@ class _ProviderPlanScreenState extends State<ProviderPlanScreen> {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Upload your official identity and business documents to earn the Blue Verified badge. All documents are stored securely in encrypted private storage.',
-                        style: TextStyle(fontSize: 12, color: Theme.of(ctx).colorScheme.onSurfaceVariant),
+                        'Upload your National ID or government-issued identification to earn the Blue Verified badge. All documents are stored in private encrypted storage.',
+                        style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
@@ -362,43 +297,151 @@ class _ProviderPlanScreenState extends State<ProviderPlanScreen> {
                         decoration: const InputDecoration(
                           labelText: 'National ID / Passport Number',
                           hintText: 'e.g. CM1234567890AB',
-                          prefixIcon: Icon(Icons.credit_card),
+                          prefixIcon: Icon(Icons.credit_card_outlined),
                           border: OutlineInputBorder(),
                         ),
                         validator: (val) => val == null || val.trim().isEmpty ? 'Please enter your ID number' : null,
                       ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: idFrontController,
-                        decoration: const InputDecoration(
-                          labelText: 'ID Document Front URL / Storage Path',
-                          hintText: 'https://... or documents/id_front.jpg',
-                          prefixIcon: Icon(Icons.badge_outlined),
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (val) => val == null || val.trim().isEmpty ? 'Please provide ID document front' : null,
+                      const SizedBox(height: 16),
+
+                      // Document Upload Cards
+                      const Text(
+                        'National ID Photos (Required Front, Optional Back):',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                       ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: idBackController,
-                        decoration: const InputDecoration(
-                          labelText: 'ID Document Back URL (Optional)',
-                          hintText: 'https://... or documents/id_back.jpg',
-                          prefixIcon: Icon(Icons.flip_to_back_outlined),
-                          border: OutlineInputBorder(),
-                        ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          // ID Front
+                          Expanded(
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () => pickDoc((f) => setModalState(() => idFrontFile = f)),
+                              child: Container(
+                                height: 95,
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.surfaceContainerHighest.withAlpha(80),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: (idFrontFile != null || existingFrontUrl != null)
+                                        ? const Color(0xFF10B981)
+                                        : theme.colorScheme.outline.withAlpha(50),
+                                  ),
+                                ),
+                                child: idFrontFile != null
+                                    ? ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Image.file(idFrontFile!, fit: BoxFit.cover),
+                                      )
+                                    : (existingFrontUrl != null
+                                        ? ClipRRect(
+                                            borderRadius: BorderRadius.circular(12),
+                                            child: Image.network(existingFrontUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.check_circle, color: Colors.green)),
+                                          )
+                                        : Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              const Icon(Icons.add_a_photo_outlined, color: Color(0xFF06B6D4), size: 26),
+                                              const SizedBox(height: 4),
+                                              const Text('ID Front *', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                              const Text('Camera / Gallery', style: TextStyle(fontSize: 9, color: Colors.grey)),
+                                            ],
+                                          )),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          // ID Back
+                          Expanded(
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () => pickDoc((f) => setModalState(() => idBackFile = f)),
+                              child: Container(
+                                height: 95,
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.surfaceContainerHighest.withAlpha(80),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: (idBackFile != null || existingBackUrl != null)
+                                        ? const Color(0xFF10B981)
+                                        : theme.colorScheme.outline.withAlpha(50),
+                                  ),
+                                ),
+                                child: idBackFile != null
+                                    ? ClipRRect(
+                                        borderRadius: BorderRadius.circular(12),
+                                        child: Image.file(idBackFile!, fit: BoxFit.cover),
+                                      )
+                                    : (existingBackUrl != null
+                                        ? ClipRRect(
+                                            borderRadius: BorderRadius.circular(12),
+                                            child: Image.network(existingBackUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.check_circle, color: Colors.green)),
+                                          )
+                                        : Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                              const Icon(Icons.flip_to_back_outlined, color: Color(0xFF06B6D4), size: 26),
+                                              const SizedBox(height: 4),
+                                              const Text('ID Back (Optional)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                              const Text('Camera / Gallery', style: TextStyle(fontSize: 9, color: Colors.grey)),
+                                            ],
+                                          )),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 12),
-                      TextFormField(
-                        controller: businessDocController,
-                        decoration: const InputDecoration(
-                          labelText: 'Business License / Certificate URL (Optional)',
-                          hintText: 'https://... or documents/license.pdf',
-                          prefixIcon: Icon(Icons.business_center_outlined),
-                          border: OutlineInputBorder(),
+                      const SizedBox(height: 14),
+
+                      // Business Document (Optional)
+                      InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => pickDoc((f) => setModalState(() => businessDocFile = f)),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.surfaceContainerHighest.withAlpha(50),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: (businessDocFile != null || existingDocUrl != null)
+                                  ? const Color(0xFF10B981)
+                                  : theme.colorScheme.outline.withAlpha(40),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                (businessDocFile != null || existingDocUrl != null)
+                                    ? Icons.check_circle
+                                    : Icons.business_center_outlined,
+                                color: (businessDocFile != null || existingDocUrl != null)
+                                    ? const Color(0xFF10B981)
+                                    : const Color(0xFF06B6D4),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Business Registration / License (Optional)',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                    ),
+                                    Text(
+                                      businessDocFile != null
+                                          ? 'Document selected: ${businessDocFile!.path.split(Platform.pathSeparator).last}'
+                                          : (existingDocUrl != null ? 'Previous document attached' : 'Tap to take photo or upload from Gallery'),
+                                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 20),
+
                       SizedBox(
                         width: double.infinity,
                         height: 48,
@@ -412,17 +455,52 @@ class _ProviderPlanScreenState extends State<ProviderPlanScreen> {
                               ? null
                               : () async {
                                   if (!formKey.currentState!.validate()) return;
+                                  if (idFrontFile == null && existingFrontUrl == null) {
+                                    ScaffoldMessenger.of(modalCtx).showSnackBar(
+                                      const SnackBar(content: Text('Please take a photo or select your ID document (Front).')),
+                                    );
+                                    return;
+                                  }
+
                                   setModalState(() => isSubmitting = true);
 
                                   try {
+                                    String? frontUrl = existingFrontUrl;
+                                    String? backUrl = existingBackUrl;
+                                    String? docUrl = existingDocUrl;
+
+                                    if (idFrontFile != null) {
+                                      frontUrl = await storage.uploadDocument(
+                                        uid: user.uid,
+                                        file: idFrontFile!,
+                                        docType: 'id_front',
+                                      );
+                                    }
+
+                                    if (idBackFile != null) {
+                                      backUrl = await storage.uploadDocument(
+                                        uid: user.uid,
+                                        file: idBackFile!,
+                                        docType: 'id_back',
+                                      );
+                                    }
+
+                                    if (businessDocFile != null) {
+                                      docUrl = await storage.uploadDocument(
+                                        uid: user.uid,
+                                        file: businessDocFile!,
+                                        docType: 'business_doc',
+                                      );
+                                    }
+
                                     final req = VerificationRequest(
                                       id: previousRequest?.id ?? '',
                                       providerId: user.uid,
                                       providerName: user.name.isNotEmpty ? user.name : (user.businessName ?? 'Provider'),
                                       nationalIdNumber: idNumberController.text.trim(),
-                                      idFrontUrl: idFrontController.text.trim(),
-                                      idBackUrl: idBackController.text.trim().isNotEmpty ? idBackController.text.trim() : null,
-                                      businessDocUrl: businessDocController.text.trim().isNotEmpty ? businessDocController.text.trim() : null,
+                                      idFrontUrl: frontUrl,
+                                      idBackUrl: backUrl,
+                                      businessDocUrl: docUrl,
                                       status: 'pending',
                                       createdAt: DateTime.now(),
                                     );
@@ -432,7 +510,7 @@ class _ProviderPlanScreenState extends State<ProviderPlanScreen> {
                                       Navigator.pop(modalCtx);
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         const SnackBar(
-                                          content: Text('Verification documents submitted! Under review by admin.'),
+                                          content: Text('National ID & verification documents submitted! Under review by admin.'),
                                           backgroundColor: Colors.green,
                                         ),
                                       );

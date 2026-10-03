@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/config/supabase_config.dart';
@@ -7,6 +8,7 @@ import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import '../repositories/notification_repository.dart';
 import '../repositories/user_repository.dart';
+import '../services/push_notification_service.dart';
 
 class MessageRepository {
   SupabaseClient get _supabase => SupabaseConfig.client;
@@ -182,26 +184,55 @@ class MessageRepository {
       rethrow;
     }
 
-    // Send notification to recipient (Phase 33)
+    // Send notification & trigger real FCM push notification to recipient (Phase 33 & FCM)
     try {
       String senderDisplayName = 'Someone';
       final senderUser = await _userRepo.getUser(senderId);
-      if (senderUser != null && senderUser.name.trim().isNotEmpty) {
+      if (senderUser != null && senderUser.name.trim().isNotEmpty && senderUser.name.trim().toLowerCase() != 'findipro user') {
         senderDisplayName = senderUser.name.trim();
+      } else {
+        final fbUser = FirebaseAuth.instance.currentUser;
+        if (fbUser != null) {
+          if (fbUser.displayName != null && fbUser.displayName!.trim().isNotEmpty && fbUser.displayName!.trim().toLowerCase() != 'findipro user') {
+            senderDisplayName = fbUser.displayName!.trim();
+          } else if (fbUser.email != null && fbUser.email!.contains('@')) {
+            final prefix = fbUser.email!.split('@').first.trim();
+            if (prefix.isNotEmpty && prefix.toLowerCase() != 'findipro user') {
+              senderDisplayName = prefix
+                  .split(RegExp(r'[._-]'))
+                  .where((p) => p.isNotEmpty)
+                  .map((p) => p[0].toUpperCase() + (p.length > 1 ? p.substring(1) : ''))
+                  .join(' ');
+            }
+          }
+        }
       }
 
       await _notifRepo.createNotification(
         userId: receiverId,
-        title: 'New Message',
-        body: 'You have a new message from $senderDisplayName.',
+        title: senderDisplayName,
+        body: trimmed,
         type: 'message',
         data: {
           if (messageId != null) 'message_id': messageId,
           'sender_id': senderId,
           'receiver_id': receiverId,
+          if (conversationId != null) 'conversation_id': conversationId,
           if (bookingId != null) 'booking_id': bookingId,
           if (jobId != null) 'job_id': jobId,
         },
+      );
+
+      // Trigger FCM push notification to recipient's active devices
+      await PushNotificationService().sendPushNotificationToUser(
+        recipientUserId: receiverId,
+        senderUserId: senderId,
+        senderName: senderDisplayName,
+        messageText: trimmed,
+        conversationId: conversationId,
+        messageId: messageId,
+        bookingId: bookingId,
+        jobId: jobId,
       );
     } catch (e) {
       debugPrint('>>> [MessageRepository.sendMessage] Notification note (non-fatal): $e');

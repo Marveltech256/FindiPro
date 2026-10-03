@@ -208,4 +208,56 @@ class AdminService {
       throw Exception('Failed to resolve report.');
     }
   }
+
+  /// Assigns or updates a provider's plan, verification status, and badges directly from the Admin Dashboard.
+  Future<void> updateProviderPlanAndBadge({
+    required String uid,
+    required String plan, // 'basic', 'verified', 'premium'
+    required bool isVerified,
+    required bool isPremium,
+    String? verificationStatus, // 'approved', 'pending', 'rejected', 'none'
+  }) async {
+    final uuid = UuidUtils.isValidUuid(uid) ? uid : UuidUtils.firebaseUidToUuid(uid);
+    final normalizedPlan = plan.toLowerCase().trim();
+    final vStatus = verificationStatus ?? (isVerified ? 'approved' : 'none');
+
+    final profileUpdates = {
+      'plan': normalizedPlan,
+      'verified': isVerified,
+      'is_verified': isVerified,
+      'premium': isPremium,
+      'is_premium': isPremium,
+      'verification_status': vStatus,
+      'subscription_status': 'active',
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    };
+
+    try {
+      await _supabase
+          .from('profiles')
+          .update(profileUpdates)
+          .or('id.eq.$uuid,firebase_uid.eq.$uid,uid.eq.$uid');
+    } catch (e) {
+      debugPrint('>>> [AdminService.updateProviderPlanAndBadge] profiles update error: $e');
+    }
+
+    try {
+      final providerUpdates = {
+        'plan': normalizedPlan,
+        'verified': isVerified,
+        'is_verified': isVerified,
+        'premium': isPremium,
+        'is_premium': isPremium,
+        'verification_status': vStatus,
+        'subscription_status': 'active',
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      };
+      await _supabase
+          .from('providers')
+          .update(providerUpdates)
+          .or('id.eq.$uuid,user_id.eq.$uuid,firebase_uid.eq.$uid,uid.eq.$uid');
+    } catch (e) {
+      debugPrint('>>> [AdminService.updateProviderPlanAndBadge] providers update error: $e');
+    }
+  }
 }

@@ -1,7 +1,7 @@
 name: findipro
 description: "FindiPro - Find trusted service providers near you (plumbers, mechanics, electricians, and more)."
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.2+20
 
 environment:
   sdk: '>=3.3.0 <4.0.0'
@@ -30,6 +30,7 @@ dependencies:
   google_fonts: ^6.2.1
   cached_network_image: ^3.3.1
   intl: ^0.19.0
+  http: ^1.2.0
   url_launcher: ^6.3.0
   shared_preferences: ^2.2.3
   image_picker: ^1.1.2
@@ -39,13 +40,25 @@ dependencies:
   uuid: ^4.5.1
   crypto: ^3.0.6
   flutter_local_notifications: ^22.3.0
+  timezone: ^0.11.0
+  flutter_svg: ^2.0.17
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: false
+  image_path: "assets/branding/findipro_icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/branding/findipro_icon.png"
 
 flutter:
   uses-material-design: true
-  # assets:
-  #   - assets/images/google_logo.png
+  assets:
+    - assets/branding/
+

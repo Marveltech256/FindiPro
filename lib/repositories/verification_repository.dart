@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/config/supabase_config.dart';
 import '../core/utils/uuid_utils.dart';
 import '../models/verification_request.dart';
+import '../services/push_notification_service.dart';
 import 'notification_repository.dart';
 
 class VerificationRepository {
@@ -93,6 +94,21 @@ class VerificationRepository {
         });
   }
 
+  /// Fetches verification requests by status for admin review.
+  Future<List<VerificationRequest>> fetchRequests({String status = 'pending'}) async {
+    try {
+      dynamic query = _supabase.from('verification_requests').select();
+      if (status.isNotEmpty && status != 'all') {
+        query = query.eq('status', status);
+      }
+      final res = await query.order('created_at', ascending: false);
+      return (res as List).map((r) => VerificationRequest.fromMap(r)).toList();
+    } catch (e) {
+      debugPrint('>>> [VerificationRepository.fetchRequests] Error: $e');
+      return <VerificationRequest>[];
+    }
+  }
+
   /// Streams verification requests by status for admin review.
   Stream<List<VerificationRequest>> getPendingRequests({String status = 'pending'}) {
     var query = _supabase
@@ -158,14 +174,23 @@ class VerificationRepository {
       throw Exception('Failed to approve verification request.');
     }
 
-    // Notify provider
+    // Notify provider with celebration in-app notification and push notification
     try {
       await NotificationRepository().createNotification(
         userId: providerId,
         title: 'Verification Approved 🎉',
-        body: 'Your identity and business verification has been approved! Your Blue Verification badge is now active on your public profile.',
+        body: 'Your identity and business verification has been approved! Your verified provider status is now active.',
         type: 'verification',
         data: {'status': 'approved', 'request_id': requestId},
+      );
+      await PushNotificationService().sendPushNotificationToUser(
+        recipientUserId: providerId,
+        senderUserId: 'admin',
+        title: 'Verification Approved 🎉',
+        body: 'Congratulations! Your identity and business verification has been approved by admin.',
+        type: 'verification_approved',
+        requestId: requestId,
+        extraData: {'status': 'approved', 'request_id': requestId},
       );
     } catch (_) {}
   }

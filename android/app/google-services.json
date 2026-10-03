@@ -7,18 +7,42 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:456209894195:android:df5121a7737b8005f24c46",
+        "mobilesdk_app_id": "1:456209894195:android:484b12fc03b10cfef24c46",
         "android_client_info": {
-          "package_name": "com.findipro.app"
+          "package_name": "com.findipro.com"
         }
       },
       "oauth_client": [
         {
-          "client_id": "456209894195-efhgadm7s860r0am4ms5vob62n43etmt.apps.googleusercontent.com",
+          "client_id": "456209894195-0rqkv96rfq5p28hilslsrbtjut9mlmna.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.findipro.app",
+            "package_name": "com.findipro.com",
             "certificate_hash": "5f0af2f3c81931d87170c3170d7895d51f93e7cd"
+          }
+        },
+        {
+          "client_id": "456209894195-c33v1k4jgsldsl7j25cto7avoajfunki.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.findipro.com",
+            "certificate_hash": "7704f0168ad9c2389e9d2729391111877d47c1bf"
+          }
+        },
+        {
+          "client_id": "456209894195-l26i168sgj774q5cju8n91m8h64pckaj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.findipro.com",
+            "certificate_hash": "df44fedec4ed43712ac0fd68003b4fec849a715a"
+          }
+        },
+        {
+          "client_id": "456209894195-v48pjud8p76urr5l614ev7kjaf9mmmnm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.findipro.com",
+            "certificate_hash": "839814e3372c93435341c0792d49645123351df7"
           }
         },
         {

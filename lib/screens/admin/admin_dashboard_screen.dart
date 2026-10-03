@@ -4,6 +4,10 @@ import '../../core/config/supabase_config.dart';
 import '../../repositories/user_repository.dart';
 import '../../services/admin_service.dart';
 import '../../services/auth_service.dart';
+import 'admin_jobs_screen.dart';
+import 'admin_payments_screen.dart';
+import 'admin_reviews_screen.dart';
+import 'admin_services_screen.dart';
 import 'admin_users_screen.dart';
 import 'verification_requests_screen.dart';
 
@@ -254,23 +258,35 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-            _tile(context, 'All Users', Icons.people, () {
+            _tile(context, 'All Users', Icons.people_outline, () {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminUsersScreen()));
             }),
-            _tile(context, 'Providers', Icons.store, () {
+            _tile(context, 'Providers & Businesses', Icons.storefront_outlined, () {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminUsersScreen(filterRole: 'provider')));
             }),
             _tile(
               context,
-              'Verification Requests',
-              Icons.verified_user,
+              'Provider Verification Requests',
+              Icons.verified_user_outlined,
               () async {
                 await Navigator.push(context, MaterialPageRoute(builder: (_) => const VerificationRequestsScreen()));
                 _loadMetrics();
               },
               badge: _metrics != null && _metrics!.pendingVerifications > 0 ? '${_metrics!.pendingVerifications}' : null,
             ),
-            _tile(context, 'Reports', Icons.flag_outlined, () => _showReportsDialog(context)),
+            _tile(context, 'Hire Requests & Jobs', Icons.work_outline, () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminJobsScreen())).then((_) => _loadMetrics());
+            }),
+            _tile(context, 'Services Management', Icons.build_outlined, () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminServicesScreen()));
+            }),
+            _tile(context, 'Reviews Moderation', Icons.star_half_outlined, () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminReviewsScreen())).then((_) => _loadMetrics());
+            }),
+            _tile(context, 'Payments & Subscriptions', Icons.payments_outlined, () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminPaymentsScreen())).then((_) => _loadMetrics());
+            }),
+            _tile(context, 'Reports & Disputes', Icons.flag_outlined, () => _showReportsDialog(context)),
           ],
         ),
       ),

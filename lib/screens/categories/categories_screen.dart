@@ -13,11 +13,19 @@ class CategoriesScreen extends StatelessWidget {
     'Painting',
     'Gardening',
     'Carpentry',
+    'AC Repair',
+    'Roofing',
+    'Welding',
+    'Security',
+    'Tiling',
+    'Pest Control',
+    'Appliance Repair',
     'Moving',
-    'Beauty',
+    'Beauty & Saloon',
     'Construction',
     'IT & Technology',
-    'Other'
+    'Household Items',
+    'Other',
   ];
 
   @override
@@ -52,6 +60,7 @@ class CategoriesScreen extends StatelessWidget {
               ),
               itemBuilder: (context, index) {
                 final name = _categories[index];
+                final color = categoryColor(name);
                 return InkWell(
                   borderRadius: BorderRadius.circular(22),
                   onTap: () => Navigator.push(
@@ -74,12 +83,12 @@ class CategoriesScreen extends StatelessWidget {
                           width: 52,
                           height: 52,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF06B6D4).withAlpha(30),
+                            color: color.withAlpha(28),
                             borderRadius: BorderRadius.circular(16),
                           ),
                           child: Icon(
                             categoryIcon(name),
-                            color: const Color(0xFF06B6D4),
+                            color: color,
                             size: 28,
                           ),
                         ),

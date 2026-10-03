@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
@@ -22,11 +23,24 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
   UserModel? _currentUser;
   bool _loadingUser = true;
   final Map<String, bool> _reviewedCache = {};
+  StreamSubscription<User?>? _authSub;
 
   @override
   void initState() {
     super.initState();
     _loadUser();
+
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (mounted) {
+        _loadUser();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadUser() async {
@@ -40,7 +54,12 @@ class _MyRequestsScreenState extends State<MyRequestsScreen> {
         });
       }
     } else {
-      if (mounted) setState(() => _loadingUser = false);
+      if (mounted) {
+        setState(() {
+          _currentUser = null;
+          _loadingUser = false;
+        });
+      }
     }
   }
 

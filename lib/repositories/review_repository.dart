@@ -5,6 +5,7 @@ import '../core/config/supabase_config.dart';
 import '../core/utils/uuid_utils.dart';
 import '../models/review_model.dart';
 import '../repositories/user_repository.dart';
+import '../services/push_notification_service.dart';
 
 class ReviewRepository {
   SupabaseClient get _supabase => SupabaseConfig.client;
@@ -447,7 +448,7 @@ class ReviewRepository {
     }
 
     // ----------------------------------------------------------
-    // PROVIDER NOTIFICATION
+    // PROVIDER NOTIFICATION & FCM PUSH NOTIFICATION
     // ----------------------------------------------------------
 
     try {
@@ -464,19 +465,23 @@ class ReviewRepository {
         }
       } catch (_) {}
 
+      final notifTitle = 'New Review Received';
+      final notifBody = '$customerName left you a $rating-star review.';
+
       await _supabase
           .from('notifications')
           .insert({
         'user_id': providerUuid,
-        'title': 'New Review Received',
-        'body':
-            '$customerName left you a $rating-star review.',
+        'title': notifTitle,
+        'body': notifBody,
         'type': 'review',
         'data': {
           if (reviewId != null)
             'review_id': reviewId,
           if (jobUuid != null)
             'job_id': jobUuid,
+          if (bookingUuid != null)
+            'booking_id': bookingUuid,
           if (businessUuid != null)
             'business_id': businessUuid,
           'customer_id': customerUuid,
@@ -490,11 +495,32 @@ class ReviewRepository {
       debugPrint(
         '>>> Provider review notification created.',
       );
+
+      // Trigger FCM push notification to provider's active device tokens
+      await PushNotificationService().sendPushNotificationToUser(
+        recipientUserId: providerUuid,
+        senderUserId: customerUuid,
+        senderName: customerName,
+        title: notifTitle,
+        body: notifBody,
+        type: 'review',
+        jobId: jobUuid,
+        bookingId: bookingUuid,
+        extraData: {
+          if (reviewId != null) 'review_id': reviewId,
+          if (jobUuid != null) 'job_id': jobUuid,
+          if (bookingUuid != null) 'booking_id': bookingUuid,
+          if (businessUuid != null) 'business_id': businessUuid,
+          'customer_id': customerUuid,
+          'provider_id': providerUuid,
+          'rating': rating,
+        },
+      );
     } catch (e) {
       // Notification failure must NOT make a successful
       // review appear to fail.
       debugPrint(
-        '>>> Review notification failed: $e',
+        '>>> Review notification failed (non-fatal): $e',
       );
     }
 
@@ -1018,5 +1044,42 @@ class ReviewRepository {
     );
 
     return enriched;
+  }
+
+  // ============================================================
+  // GET REVIEWS WRITTEN BY CUSTOMER / CLIENT
+  // ============================================================
+
+  Future<List<ReviewModel>> getCustomerReviews(String customerId) async {
+    final customerUuid = _toUuid(customerId);
+    final targetIds = <String>{};
+    if (customerUuid.isNotEmpty) targetIds.add(customerUuid);
+    if (customerId.trim().isNotEmpty) targetIds.add(customerId.trim());
+
+    if (targetIds.isEmpty) return [];
+
+    final rows = <Map<String, dynamic>>[];
+
+    for (final id in targetIds) {
+      try {
+        final result = await _supabase
+            .from('reviews')
+            .select()
+            .eq('customer_id', id)
+            .order('created_at', ascending: false);
+
+        for (final item in result) {
+          final map = Map<String, dynamic>.from(item);
+          final reviewId = (map['id'] ?? '').toString();
+          if (reviewId.isNotEmpty && !rows.any((r) => r['id'].toString() == reviewId)) {
+            rows.add(map);
+          }
+        }
+      } catch (e) {
+        debugPrint('>>> [ReviewRepository.getCustomerReviews] error: $e');
+      }
+    }
+
+    return rows.map((r) => ReviewModel.fromMap(r)).toList();
   }
 }

@@ -1,15 +1,21 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../core/utils/uuid_utils.dart';
+import '../../core/widgets/report_dialog.dart';
 import '../../models/review_model.dart';
 import '../../models/service_model.dart';
 import '../../models/user_model.dart';
 import '../../repositories/booking_repository.dart';
 import '../../repositories/review_repository.dart';
 import '../../repositories/service_repository.dart';
+import '../../repositories/user_repository.dart';
+import '../../services/presence_service.dart';
+import '../../services/service_reminder_service.dart';
 import '../auth/login_screen.dart';
 import '../chat_screen.dart';
 import '../hire/request_hire_screen.dart';
+import '../profile/edit_profile_screen.dart';
+import '../quotation/request_quotation_screen.dart';
 import 'write_review_screen.dart';
 
 class ProviderDetailScreen extends StatefulWidget {
@@ -26,6 +32,8 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
   final _reviewRepo = ReviewRepository();
   final _bookingRepo = BookingRepository();
   final _serviceRepo = ServiceRepository();
+  final _userRepo = UserRepository();
+  late UserModel _currentProvider;
 
   List<ReviewModel> _reviews = [];
   List<ServiceModel> _services = [];
@@ -37,8 +45,32 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _currentProvider = widget.provider;
+    _refreshProviderData();
     _loadReviews();
     _loadServices();
+
+    // Record viewed provider service for 24-hour pickup reminder
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_isSelf && mounted) {
+        ServiceReminderService().recordServiceViewed(
+          providerId: widget.provider.uid,
+          providerName: widget.provider.name,
+          category: widget.provider.category ?? 'Service',
+        );
+      }
+    });
+  }
+
+  Future<void> _refreshProviderData() async {
+    try {
+      final fresh = await _userRepo.getUser(widget.provider.uid, forceRefresh: true);
+      if (fresh != null && mounted) {
+        setState(() {
+          _currentProvider = fresh;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadServices() async {
@@ -175,8 +207,34 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
       ),
     );
     if (res == true) {
+      ServiceReminderService().recordServiceBooked(providerId: widget.provider.uid);
       _loadReviews();
     }
+  }
+
+  void _onRequestQuotation() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to request a quotation.')),
+      );
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+      return;
+    }
+
+    if (_isSelf) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You cannot request a quotation from your own account.')),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RequestQuotationScreen(provider: widget.provider),
+      ),
+    );
   }
 
   void _onReview() async {
@@ -287,6 +345,30 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                   color: Colors.white,
                 ),
               ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert, color: Colors.white),
+                onSelected: (val) {
+                  if (val == 'report') {
+                    showReportUserDialog(
+                      context,
+                      reportedUserId: widget.provider.uid,
+                      reportedUserName: widget.provider.name,
+                    );
+                  }
+                },
+                itemBuilder: (ctx) => [
+                  const PopupMenuItem(
+                    value: 'report',
+                    child: Row(
+                      children: [
+                        Icon(Icons.shield_outlined, color: Colors.red, size: 20),
+                        SizedBox(width: 8),
+                        Text('Report Provider', style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ],
             flexibleSpace: FlexibleSpaceBar(
               background: widget.provider.photoUrl != null &&
@@ -386,6 +468,65 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 8),
+                  StreamBuilder<Map<String, dynamic>>(
+                    stream: PresenceService().watchPresence(widget.provider.uid),
+                    builder: (context, presenceSnap) {
+                      final isOnline = presenceSnap.data?['is_online'] == true;
+                      final lastSeen = presenceSnap.data?['last_seen'] as DateTime?;
+                      final presenceText = UserModel.formatPresence(isOnline: isOnline, lastSeen: lastSeen);
+                      final isInactive = !isOnline && lastSeen != null && DateTime.now().difference(lastSeen).inDays >= 14;
+
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: isOnline
+                              ? const Color(0xFF10B981).withAlpha(20)
+                              : isInactive
+                                  ? const Color(0xFFEF4444).withAlpha(20)
+                                  : Theme.of(context).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isOnline
+                                ? const Color(0xFF10B981).withAlpha(60)
+                                : isInactive
+                                    ? const Color(0xFFEF4444).withAlpha(60)
+                                    : Colors.grey.withAlpha(40),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: isOnline
+                                    ? const Color(0xFF10B981)
+                                    : isInactive
+                                        ? const Color(0xFFEF4444)
+                                        : Colors.grey,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              isOnline ? 'Online now' : presenceText,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: isOnline
+                                    ? const Color(0xFF047857)
+                                    : isInactive
+                                        ? const Color(0xFFB91C1C)
+                                        : Theme.of(context).colorScheme.onSurface.withAlpha(180),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 20),
                   _heading('About'),
@@ -556,7 +697,7 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                   _info(Icons.email_outlined, 'Email', widget.provider.email),
                   const SizedBox(height: 24),
                   _heading('Portfolio'),
-                  _gallerySection(widget.provider.images),
+                  _gallerySection(_currentProvider.images),
                   const SizedBox(height: 24),
 
                   // Reviews List Section
@@ -672,6 +813,20 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
                         SizedBox(
                           width: double.infinity,
                           height: 50,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: Color(0xFF06B6D4), width: 1.5),
+                              foregroundColor: const Color(0xFF06B6D4),
+                            ),
+                            icon: const Icon(Icons.request_quote_outlined),
+                            label: const Text('Request a Quotation / Estimate'),
+                            onPressed: _onRequestQuotation,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 50,
                           child: ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF06B6D4),
@@ -761,8 +916,62 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
 
   Widget _gallerySection(List<String> images) {
     if (images.isEmpty) {
+      if (_isSelf) {
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.outline.withAlpha(50),
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.add_photo_alternate_outlined, size: 36, color: Color(0xFF06B6D4)),
+              const SizedBox(height: 8),
+              const Text(
+                'No portfolio photos uploaded yet',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Showcase your recent projects and work to attract more clients.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => EditProfileScreen(
+                        name: _currentProvider.name,
+                        phone: _currentProvider.phone,
+                        location: _currentProvider.location ?? '',
+                        photoUrl: _currentProvider.photoUrl,
+                      ),
+                    ),
+                  );
+                  _refreshProviderData();
+                },
+                icon: const Icon(Icons.add_a_photo, size: 16),
+                label: const Text('Add Portfolio Photos'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF06B6D4),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
       return Container(
-        height: 120,
+        height: 110,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -776,19 +985,102 @@ class _ProviderDetailScreenState extends State<ProviderDetailScreen> {
       height: 120,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: images.length,
+        itemCount: images.length + (_isSelf ? 1 : 0),
         separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
-          return ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Image.network(
-              images[index],
-              width: 120,
-              height: 120,
-              fit: BoxFit.cover,
+          if (index == images.length && _isSelf) {
+            return InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => EditProfileScreen(
+                      name: _currentProvider.name,
+                      phone: _currentProvider.phone,
+                      location: _currentProvider.location ?? '',
+                      photoUrl: _currentProvider.photoUrl,
+                    ),
+                  ),
+                );
+                _refreshProviderData();
+              },
+              child: Container(
+                width: 110,
+                height: 120,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFF06B6D4).withAlpha(120),
+                  ),
+                ),
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add_photo_alternate, color: Color(0xFF06B6D4), size: 28),
+                    SizedBox(height: 6),
+                    Text(
+                      'Add More',
+                      style: TextStyle(
+                        color: Color(0xFF06B6D4),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
+          final imgUrl = images[index];
+          return GestureDetector(
+            onTap: () => _showFullScreenImage(context, imgUrl),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.network(
+                imgUrl,
+                width: 120,
+                height: 120,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  width: 120,
+                  height: 120,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: const Icon(Icons.broken_image, color: Colors.grey),
+                ),
+              ),
             ),
           );
         },
+      ),
+    );
+  }
+
+  void _showFullScreenImage(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.black87,
+        insetPadding: const EdgeInsets.all(12),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            Center(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: InteractiveViewer(
+                  child: Image.network(url, fit: BoxFit.contain),
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white, size: 28),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
       ),
     );
   }

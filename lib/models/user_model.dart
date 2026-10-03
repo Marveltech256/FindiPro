@@ -34,6 +34,10 @@ class UserModel {
   final DateTime? subscriptionExpiresAt;
   final String? verificationStatus; // 'pending', 'approved', 'rejected', 'suspended'
 
+  // Presence & Online Status fields
+  final bool isOnline;
+  final DateTime? lastSeen;
+
   const UserModel({
     required this.uid,
     required this.name,
@@ -67,22 +71,136 @@ class UserModel {
     this.subscriptionCurrency,
     this.subscriptionExpiresAt,
     this.verificationStatus,
+    this.isOnline = false,
+    this.lastSeen,
   });
+
+  UserModel copyWith({
+    String? uid,
+    String? name,
+    String? email,
+    String? phone,
+    String? role,
+    String? photoUrl,
+    double? latitude,
+    double? longitude,
+    bool? emailVerified,
+    String? category,
+    String? location,
+    bool? isApproved,
+    String? about,
+    String? bio,
+    List<String>? skills,
+    int? yearsExperience,
+    bool? available,
+    double? rating,
+    int? reviewCount,
+    String? priceRange,
+    String? businessName,
+    List<String>? images,
+    bool? verified,
+    bool? premium,
+    bool? isBlocked,
+    bool? isAdmin,
+    String? plan,
+    String? subscriptionStatus,
+    String? subscriptionRegion,
+    String? subscriptionCurrency,
+    DateTime? subscriptionExpiresAt,
+    String? verificationStatus,
+    bool? isOnline,
+    DateTime? lastSeen,
+  }) {
+    return UserModel(
+      uid: uid ?? this.uid,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      role: role ?? this.role,
+      photoUrl: photoUrl ?? this.photoUrl,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      emailVerified: emailVerified ?? this.emailVerified,
+      category: category ?? this.category,
+      location: location ?? this.location,
+      isApproved: isApproved ?? this.isApproved,
+      about: about ?? this.about,
+      bio: bio ?? this.bio,
+      skills: skills ?? this.skills,
+      yearsExperience: yearsExperience ?? this.yearsExperience,
+      available: available ?? this.available,
+      rating: rating ?? this.rating,
+      reviewCount: reviewCount ?? this.reviewCount,
+      priceRange: priceRange ?? this.priceRange,
+      businessName: businessName ?? this.businessName,
+      images: images ?? this.images,
+      verified: verified ?? this.verified,
+      premium: premium ?? this.premium,
+      isBlocked: isBlocked ?? this.isBlocked,
+      isAdmin: isAdmin ?? this.isAdmin,
+      plan: plan ?? this.plan,
+      subscriptionStatus: subscriptionStatus ?? this.subscriptionStatus,
+      subscriptionRegion: subscriptionRegion ?? this.subscriptionRegion,
+      subscriptionCurrency: subscriptionCurrency ?? this.subscriptionCurrency,
+      subscriptionExpiresAt: subscriptionExpiresAt ?? this.subscriptionExpiresAt,
+      verificationStatus: verificationStatus ?? this.verificationStatus,
+      isOnline: isOnline ?? this.isOnline,
+      lastSeen: lastSeen ?? this.lastSeen,
+    );
+  }
 
   bool get isProvider => role == 'provider' || role == 'technician';
   bool get isCustomer => role == 'customer' || role == 'client';
 
+  /// Human-friendly last seen display matching WhatsApp style.
+  String get lastSeenFormatted => formatPresence(isOnline: isOnline, lastSeen: lastSeen);
+
+  /// Static formatter for presence info (WhatsApp style).
+  static String formatPresence({required bool isOnline, DateTime? lastSeen}) {
+    if (isOnline) return 'Online';
+    if (lastSeen == null) return 'Offline';
+
+    final now = DateTime.now();
+    final local = lastSeen.toLocal();
+
+    final hour12 = local.hour == 0 ? 12 : (local.hour > 12 ? local.hour - 12 : local.hour);
+    final minuteStr = local.minute.toString().padLeft(2, '0');
+    final period = local.hour >= 12 ? 'PM' : 'AM';
+    final timeStr = '$hour12:$minuteStr $period';
+
+    final today = DateTime(now.year, now.month, now.day);
+    final seenDay = DateTime(local.year, local.month, local.day);
+    final diffDays = today.difference(seenDay).inDays;
+
+    if (diffDays == 0) {
+      return 'last seen today at $timeStr';
+    } else if (diffDays == 1) {
+      return 'last seen yesterday at $timeStr';
+    } else if (local.year == now.year) {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      final monthName = months[local.month - 1];
+      return 'last seen ${local.day} $monthName at $timeStr';
+    } else {
+      return 'last seen ${local.day}/${local.month}/${local.year} at $timeStr';
+    }
+  }
+
+  /// Global launch promotion flag: Unlocks Premium on us for all service providers.
+  static bool isLaunchPromotionActive = true;
+
   /// Whether provider's paid plan is currently active and not expired.
   bool get isSubscriptionActive {
+    if (isLaunchPromotionActive && isProvider) return true;
     if (subscriptionExpiresAt != null && subscriptionExpiresAt!.isBefore(DateTime.now())) {
       return false;
     }
     return subscriptionStatus.toLowerCase() == 'active';
   }
 
-  /// Active plan after checking expiration. If expired, safely downgrades to 'basic'.
+  /// Active plan after checking expiration and promotional status.
   String get effectivePlan {
     if (!isProvider) return 'basic';
+    if (isLaunchPromotionActive) return 'premium';
     final p = plan.toLowerCase();
     if (p == 'basic') return 'basic';
     if (!isSubscriptionActive) return 'basic';
@@ -90,20 +208,17 @@ class UserModel {
   }
 
   /// Whether the provider qualifies for the blue Verified badge.
-  /// Conditions: plan is 'verified' (or legacy verified) AND verification_status is 'approved' AND active subscription.
   bool get isVerifiedBadge {
     if (!isProvider) return false;
-    final p = effectivePlan;
     final isApprovedVerif = (verificationStatus ?? '').toLowerCase() == 'approved' || verified;
-    return (p == 'verified' || (verified && isSubscriptionActive)) && isApprovedVerif;
+    return isApprovedVerif;
   }
 
   /// Whether the provider qualifies for the golden Premium badge.
-  /// Conditions: effective plan is 'premium'.
   bool get isPremiumBadge {
-    if (!isProvider) return false;
-    final p = effectivePlan;
-    return p == 'premium' || (premium && isSubscriptionActive);
+    // Launch promotion grants premium capabilities across the platform,
+    // but the visible golden badge chip is removed until target user count is reached.
+    return false;
   }
 
   factory UserModel.fromMap(Map<String, dynamic> map, [String? fallbackUid]) {
@@ -132,10 +247,54 @@ class UserModel {
 
     final parsedPlan = (map['plan'] ?? (map['premium'] == true || map['is_premium'] == true ? 'premium' : (map['verified'] == true || map['is_verified'] == true ? 'verified' : 'basic'))).toString().toLowerCase();
 
+    final rawEmail = (map['email'] ?? '').toString();
+    final bool isAdminFlag = map['isAdmin'] == true || map['is_admin'] == true || parsedRole == 'admin';
+
+    String formatNameFromEmail(String emailStr) {
+      if (emailStr.isEmpty || !emailStr.contains('@')) return '';
+      final prefix = emailStr.split('@').first.trim();
+      if (prefix.isEmpty || prefix.toLowerCase() == 'findipro user') return '';
+      return prefix
+          .split(RegExp(r'[._-]'))
+          .where((part) => part.isNotEmpty)
+          .map((part) => part[0].toUpperCase() + (part.length > 1 ? part.substring(1) : ''))
+          .join(' ');
+    }
+
+    String resolveName() {
+      final candidates = [
+        map['full_name'],
+        map['display_name'],
+        map['name'],
+        map['username'],
+        map['user_name'],
+      ];
+      if (map['first_name'] != null || map['last_name'] != null) {
+        final fn = (map['first_name'] ?? '').toString().trim();
+        final ln = (map['last_name'] ?? '').toString().trim();
+        final combined = '$fn $ln'.trim();
+        if (combined.isNotEmpty) candidates.add(combined);
+      }
+      for (final c in candidates) {
+        if (c != null) {
+          final s = c.toString().trim();
+          if (s.isNotEmpty && s.toLowerCase() != 'findipro user' && s.toLowerCase() != 'user') {
+            return s;
+          }
+        }
+      }
+      final fromEmail = formatNameFromEmail(rawEmail);
+      if (fromEmail.isNotEmpty) return fromEmail;
+      if (isAdminFlag) return 'Admin';
+      return '';
+    }
+
+    final resolvedName = resolveName();
+
     return UserModel(
       uid: uid,
-      name: (map['full_name'] ?? map['display_name'] ?? map['name'] ?? '').toString(),
-      email: (map['email'] ?? '').toString(),
+      name: resolvedName,
+      email: rawEmail,
       phone: (map['phone'] ?? '').toString(),
       role: parsedRole,
       photoUrl: _stringOrNull(map['photoUrl'] ?? map['photo_url'] ?? map['avatar_url']),
@@ -154,8 +313,19 @@ class UserModel {
       reviewCount: (map['reviewCount'] ?? map['review_count'] as num?)?.toInt() ?? 0,
       priceRange: (map['priceRange'] ?? map['price_range'] ?? '').toString(),
       businessName: _stringOrNull(map['businessName'] ?? map['business_name']),
-      images: List<String>.from(map['images'] ?? map['portfolio_images'] ?? const []),
-      verified: map['verified'] == true || map['is_verified'] == true,
+      images: () {
+        dynamic raw = map['images'];
+        if (raw == null || (raw is List && raw.isEmpty)) {
+          raw = map['portfolio_images'];
+        }
+        if (raw is List) {
+          return raw
+              .map((e) => e?.toString().trim() ?? '')
+              .where((s) => s.isNotEmpty && s.startsWith('http'))
+              .toList();
+        }
+        return <String>[];
+      }(),      verified: map['verified'] == true || map['is_verified'] == true,
       premium: map['premium'] == true || map['is_premium'] == true,
       isBlocked: map['isBlocked'] == true || map['is_blocked'] == true,
       isAdmin: map['isAdmin'] == true || map['is_admin'] == true || parsedRole == 'admin',
@@ -165,6 +335,8 @@ class UserModel {
       subscriptionCurrency: _stringOrNull(map['subscription_currency'] ?? map['subscriptionCurrency']),
       subscriptionExpiresAt: parseNullableDate(map['subscription_expires_at'] ?? map['subscriptionExpiresAt']),
       verificationStatus: _stringOrNull(map['verification_status'] ?? map['verificationStatus']),
+      isOnline: map['isOnline'] == true || map['is_online'] == true,
+      lastSeen: parseNullableDate(map['lastSeen'] ?? map['last_seen']),
     );
   }
 
@@ -202,6 +374,7 @@ class UserModel {
         'businessName': businessName,
         'business_name': businessName,
         'images': images,
+        'portfolio_images': images,
         'verified': verified,
         'is_verified': verified,
         'premium': premium,
@@ -216,6 +389,10 @@ class UserModel {
         if (subscriptionCurrency != null) 'subscription_currency': subscriptionCurrency,
         if (subscriptionExpiresAt != null) 'subscription_expires_at': subscriptionExpiresAt!.toUtc().toIso8601String(),
         if (verificationStatus != null) 'verification_status': verificationStatus,
+        'is_online': isOnline,
+        'isOnline': isOnline,
+        if (lastSeen != null) 'last_seen': lastSeen!.toUtc().toIso8601String(),
+        if (lastSeen != null) 'lastSeen': lastSeen!.toUtc().toIso8601String(),
       };
 
   static String? _stringOrNull(dynamic value) {

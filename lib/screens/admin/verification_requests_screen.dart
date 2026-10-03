@@ -12,6 +12,30 @@ class VerificationRequestsScreen extends StatefulWidget {
 class _VerificationRequestsScreenState extends State<VerificationRequestsScreen> {
   final VerificationRepository _repo = VerificationRepository();
   String _selectedStatus = 'pending';
+  bool _loading = true;
+  List<VerificationRequest> _requests = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRequests();
+  }
+
+  Future<void> _loadRequests() async {
+    if (mounted) setState(() => _loading = true);
+    try {
+      final list = await _repo.fetchRequests(status: _selectedStatus);
+      if (mounted) {
+        setState(() {
+          _requests = list;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('>>> [VerificationRequestsScreen._loadRequests] error: $e');
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   void _showDocumentPreview(BuildContext context, String title, String url) {
     showDialog(
@@ -93,6 +117,7 @@ class _VerificationRequestsScreenState extends State<VerificationRequestsScreen>
                     const SnackBar(content: Text('Verification request rejected.')),
                   );
                 }
+                _loadRequests();
               } catch (_) {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -130,6 +155,7 @@ class _VerificationRequestsScreenState extends State<VerificationRequestsScreen>
               onSelected: (selected) {
                 if (selected) {
                   setState(() => _selectedStatus = s['key']!);
+                  _loadRequests();
                 }
               },
             ),
@@ -146,261 +172,268 @@ class _VerificationRequestsScreenState extends State<VerificationRequestsScreen>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Verification Requests'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadRequests,
+            tooltip: 'Refresh Requests',
+          ),
+        ],
       ),
       body: Column(
         children: [
           _buildStatusFilterChips(),
           Expanded(
-            child: StreamBuilder<List<VerificationRequest>>(
-              stream: _repo.getPendingRequests(status: _selectedStatus),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text('Unable to load verification requests: ${snapshot.error}'),
-                  );
-                }
-
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final docs = snapshot.data!;
-
-                if (docs.isEmpty) {
-                  return Center(
-                    child: Text('No ${_selectedStatus == 'all' ? '' : '$_selectedStatus '}verification requests.'),
-                  );
-                }
-
-                return ListView.builder(
-                  itemCount: docs.length,
-                  itemBuilder: (context, index) {
-                    final req = docs[index];
-                    final isPending = req.status.toLowerCase() == 'pending';
-                    final isApproved = req.status.toLowerCase() == 'approved';
-
-                    Color statusColor = Colors.orange;
-                    if (isApproved) statusColor = Colors.green;
-                    if (req.status.toLowerCase() == 'rejected') statusColor = Colors.red;
-
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator.adaptive())
+                : RefreshIndicator(
+                    onRefresh: _loadRequests,
+                    child: _requests.isEmpty
+                        ? Center(
+                            child: ListView(
+                              shrinkWrap: true,
                               children: [
-                                Expanded(
-                                  child: Text(
-                                    req.providerName.isNotEmpty ? req.providerName : 'Provider ${req.providerId}',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 17,
-                                    ),
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: statusColor.withAlpha(30),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    req.status.toUpperCase(),
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: statusColor,
+                                Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(24),
+                                    child: Text(
+                                      'No ${_selectedStatus == 'all' ? '' : '$_selectedStatus '}verification requests.',
+                                      style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
                                     ),
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Submitted on ${req.createdAt.day}/${req.createdAt.month}/${req.createdAt.year}',
-                              style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
-                            ),
-                            if (req.nationalIdNumber != null && req.nationalIdNumber!.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  const Icon(Icons.credit_card, size: 16, color: Colors.grey),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'ID Number: ${req.nationalIdNumber}',
-                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                                  ),
-                                ],
-                              ),
-                            ],
-                            const SizedBox(height: 12),
-                            const Text(
-                              'Submitted Documents:',
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(height: 6),
-                            if (req.idFrontUrl != null && req.idFrontUrl!.isNotEmpty) ...[
-                              InkWell(
-                                onTap: () => _showDocumentPreview(context, 'Government ID (Front)', req.idFrontUrl!),
+                          )
+                        : ListView.builder(
+                            itemCount: _requests.length,
+                            itemBuilder: (context, index) {
+                              final req = _requests[index];
+                              final isPending = req.status.toLowerCase() == 'pending';
+                              final isApproved = req.status.toLowerCase() == 'approved';
+
+                              Color statusColor = Colors.orange;
+                              if (isApproved) statusColor = Colors.green;
+                              if (req.status.toLowerCase() == 'rejected') statusColor = Colors.red;
+
+                              return Card(
+                                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                 child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 4),
-                                  child: Row(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Icon(Icons.badge_outlined, size: 16, color: Color(0xFF06B6D4)),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(
-                                          'ID Document (Front): ${req.idFrontUrl}',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Color(0xFF06B6D4),
-                                            decoration: TextDecoration.underline,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                            if (req.idBackUrl != null && req.idBackUrl!.isNotEmpty) ...[
-                              InkWell(
-                                onTap: () => _showDocumentPreview(context, 'Government ID (Back)', req.idBackUrl!),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 4),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.flip_to_back_outlined, size: 16, color: Color(0xFF06B6D4)),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(
-                                          'ID Document (Back): ${req.idBackUrl}',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Color(0xFF06B6D4),
-                                            decoration: TextDecoration.underline,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                            if (req.businessDocUrl != null && req.businessDocUrl!.isNotEmpty) ...[
-                              InkWell(
-                                onTap: () => _showDocumentPreview(context, 'Business / Skill Document', req.businessDocUrl!),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 4),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.description_outlined, size: 16, color: Color(0xFF06B6D4)),
-                                      const SizedBox(width: 6),
-                                      Expanded(
-                                        child: Text(
-                                          'Business Document: ${req.businessDocUrl}',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Color(0xFF06B6D4),
-                                            decoration: TextDecoration.underline,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                            if (req.notes != null && req.notes!.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: Colors.red.withAlpha(15),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.red.withAlpha(50)),
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Icon(Icons.info_outline, size: 16, color: Colors.red),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: Text(
-                                        'Admin Feedback: ${req.notes}',
-                                        style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w500),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                            if (isPending) ...[
-                              const SizedBox(height: 16),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green,
-                                        foregroundColor: Colors.white,
-                                      ),
-                                      icon: const Icon(Icons.check, size: 18),
-                                      label: const Text('Approve'),
-                                      onPressed: () async {
-                                        try {
-                                          await _repo.approveRequest(req.id, req.providerId);
-                                          if (context.mounted) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(
-                                                content: Text('Provider verification approved! Blue badge activated.'),
-                                                backgroundColor: Colors.green,
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              req.providerName.isNotEmpty ? req.providerName : 'Provider ${req.providerId}',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 17,
                                               ),
-                                            );
-                                          }
-                                        } catch (_) {
-                                          if (context.mounted) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(
-                                                content: Text('Failed to approve verification request.'),
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: statusColor.withAlpha(30),
+                                              borderRadius: BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                              req.status.toUpperCase(),
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                                color: statusColor,
                                               ),
-                                            );
-                                          }
-                                        }
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: Colors.red,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      icon: const Icon(Icons.close, size: 18),
-                                      label: const Text('Reject'),
-                                      onPressed: () => _showRejectDialog(context, req),
-                                    ),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Submitted on ${req.createdAt.day}/${req.createdAt.month}/${req.createdAt.year}',
+                                        style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant),
+                                      ),
+                                      if (req.nationalIdNumber != null && req.nationalIdNumber!.isNotEmpty) ...[
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.credit_card, size: 16, color: Colors.grey),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              'ID Number: ${req.nationalIdNumber}',
+                                              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                      const SizedBox(height: 12),
+                                      const Text(
+                                        'Submitted Documents:',
+                                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      if (req.idFrontUrl != null && req.idFrontUrl!.isNotEmpty) ...[
+                                        InkWell(
+                                          onTap: () => _showDocumentPreview(context, 'Government ID (Front)', req.idFrontUrl!),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(vertical: 4),
+                                            child: Row(
+                                              children: [
+                                                const Icon(Icons.badge_outlined, size: 16, color: Color(0xFF06B6D4)),
+                                                const SizedBox(width: 6),
+                                                Expanded(
+                                                  child: Text(
+                                                    'ID Document (Front): ${req.idFrontUrl}',
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      color: Color(0xFF06B6D4),
+                                                      decoration: TextDecoration.underline,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                      if (req.idBackUrl != null && req.idBackUrl!.isNotEmpty) ...[
+                                        InkWell(
+                                          onTap: () => _showDocumentPreview(context, 'Government ID (Back)', req.idBackUrl!),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(vertical: 4),
+                                            child: Row(
+                                              children: [
+                                                const Icon(Icons.flip_to_back_outlined, size: 16, color: Color(0xFF06B6D4)),
+                                                const SizedBox(width: 6),
+                                                Expanded(
+                                                  child: Text(
+                                                    'ID Document (Back): ${req.idBackUrl}',
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      color: Color(0xFF06B6D4),
+                                                      decoration: TextDecoration.underline,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                      if (req.businessDocUrl != null && req.businessDocUrl!.isNotEmpty) ...[
+                                        InkWell(
+                                          onTap: () => _showDocumentPreview(context, 'Business / Skill Document', req.businessDocUrl!),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(vertical: 4),
+                                            child: Row(
+                                              children: [
+                                                const Icon(Icons.description_outlined, size: 16, color: Color(0xFF06B6D4)),
+                                                const SizedBox(width: 6),
+                                                Expanded(
+                                                  child: Text(
+                                                    'Business Document: ${req.businessDocUrl}',
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      color: Color(0xFF06B6D4),
+                                                      decoration: TextDecoration.underline,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                      if (req.notes != null && req.notes!.isNotEmpty) ...[
+                                        const SizedBox(height: 8),
+                                        Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: Colors.red.withAlpha(15),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: Colors.red.withAlpha(50)),
+                                          ),
+                                          child: Row(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const Icon(Icons.info_outline, size: 16, color: Colors.red),
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: Text(
+                                                  'Admin Feedback: ${req.notes}',
+                                                  style: const TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w500),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                      if (isPending) ...[
+                                        const SizedBox(height: 16),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: ElevatedButton.icon(
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: Colors.green,
+                                                  foregroundColor: Colors.white,
+                                                ),
+                                                icon: const Icon(Icons.check, size: 18),
+                                                label: const Text('Approve'),
+                                                onPressed: () async {
+                                                  try {
+                                                    await _repo.approveRequest(req.id, req.providerId);
+                                                    if (context.mounted) {
+                                                      ScaffoldMessenger.of(context).showSnackBar(
+                                                        const SnackBar(
+                                                          content: Text('Provider verification approved! Blue badge activated.'),
+                                                          backgroundColor: Colors.green,
+                                                        ),
+                                                      );
+                                                    }
+                                                    _loadRequests();
+                                                  } catch (_) {
+                                                    if (context.mounted) {
+                                                      ScaffoldMessenger.of(context).showSnackBar(
+                                                        const SnackBar(
+                                                          content: Text('Failed to approve verification request.'),
+                                                        ),
+                                                      );
+                                                    }
+                                                  }
+                                                },
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: OutlinedButton.icon(
+                                                style: OutlinedButton.styleFrom(
+                                                  foregroundColor: Colors.red,
+                                                ),
+                                                icon: const Icon(Icons.close, size: 18),
+                                                label: const Text('Reject'),
+                                                onPressed: () => _showRejectDialog(context, req),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ],
                                   ),
-                                ],
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
           ),
         ],
       ),

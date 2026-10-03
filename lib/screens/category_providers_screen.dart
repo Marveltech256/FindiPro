@@ -23,8 +23,12 @@ class CategoryProvidersScreen extends StatelessWidget {
             return const Center(child: CircularProgressIndicator());
           }
 
+          final targetKey = category.toLowerCase().replaceAll(RegExp(r'[\s_&/\\-]'), '');
           final rawProviders = s.data!
-              .where((p) => (p.category ?? '').toLowerCase() == category.toLowerCase())
+              .where((p) {
+                final catKey = (p.category ?? '').toLowerCase().replaceAll(RegExp(r'[\s_&/\\-]'), '');
+                return catKey == targetKey || (catKey.isNotEmpty && targetKey.isNotEmpty && (catKey.contains(targetKey) || targetKey.contains(catKey)));
+              })
               .toList();
 
           if (rawProviders.isEmpty) {

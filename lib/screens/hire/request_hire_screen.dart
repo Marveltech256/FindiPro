@@ -1,9 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import '../../core/config/supabase_config.dart';
 import '../../models/user_model.dart';
 import '../../repositories/booking_repository.dart';
-import '../../repositories/message_repository.dart';
 
 class RequestHireScreen extends StatefulWidget {
   final UserModel provider;
@@ -23,7 +21,6 @@ class _RequestHireScreenState extends State<RequestHireScreen> {
   final _budget = TextEditingController();
   final _notes = TextEditingController();
   final _bookingRepo = BookingRepository();
-  final _messageRepo = MessageRepository();
 
   DateTime? _date;
   TimeOfDay? _time;
@@ -116,32 +113,14 @@ class _RequestHireScreenState extends State<RequestHireScreen> {
         'status': 'requested',
       });
 
-      // Send in-app message connecting the hire request
-      try {
-        final initialMessage = 'Hi ${widget.provider.name}, I requested a ${_service.text.trim()} service for ${_date!.day}/${_date!.month}/${_date!.year}. Location: ${_location.text.trim()}.';
-        await _messageRepo.sendMessage(
-          senderId: user.uid,
-          receiverId: widget.provider.uid,
-          text: initialMessage,
-        );
-      } catch (_) {}
-
-      // Send notification via Supabase notifications table
-      try {
-        await SupabaseConfig.client.from('notifications').insert({
-          'user_id': widget.provider.uid,
-          'title': 'New Service Request',
-          'body': 'You received a new hire request from ${_name.text.trim().isEmpty ? 'a client' : _name.text.trim()} for ${_service.text.trim()}.',
-          'is_read': false,
-          'created_at': DateTime.now().toUtc().toIso8601String(),
-        });
-      } catch (_) {}
-
+      // Hire request created successfully in booking_repository (with notifications & push).
+      // We do NOT send an automated chat message here so requests appear strictly
+      // in the Bookings/Requests page until the user explicitly chooses to chat.
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Request submitted successfully!'),
-            backgroundColor: Color(0xFF06B6D4),
+            backgroundColor: Color(0xFF548C2F),
           ),
         );
         Navigator.pop(context, true);

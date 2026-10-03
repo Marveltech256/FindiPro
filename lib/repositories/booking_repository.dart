@@ -2,8 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/config/supabase_config.dart';
 import '../core/utils/uuid_utils.dart';
+import '../models/user_model.dart';
 import 'notification_repository.dart';
 import 'user_repository.dart';
+import '../services/push_notification_service.dart';
 
 class BookingRepository {
   SupabaseClient get _supabase => SupabaseConfig.client;
@@ -118,7 +120,7 @@ class BookingRepository {
       }
     }
 
-    // 3. Notify provider of new hire request (Phase 33)
+    // 3. Notify provider of new hire request (Phase 33 & FCM)
     try {
       String customerDisplayName = clientName.trim();
       if (customerDisplayName.isEmpty) {
@@ -130,10 +132,13 @@ class BookingRepository {
         }
       }
 
+      final notifTitle = 'New Hire Request';
+      final notifBody = '$customerDisplayName sent you a service request for $serviceNeeded.';
+
       await _notifRepo.createNotification(
         userId: providerId,
-        title: 'New Hire Request',
-        body: '$customerDisplayName sent you a service request.',
+        title: notifTitle,
+        body: notifBody,
         type: 'hire_request',
         data: {
           'request_id': generatedBookingId ?? generatedJobId ?? '',
@@ -142,13 +147,31 @@ class BookingRepository {
           'provider_id': providerUuid,
         },
       );
+
+      // Trigger FCM push notification to provider's active devices
+      await PushNotificationService().sendPushNotificationToUser(
+        recipientUserId: providerId,
+        senderUserId: clientId,
+        senderName: customerDisplayName,
+        title: notifTitle,
+        body: notifBody,
+        type: 'hire_request',
+        requestId: generatedBookingId ?? generatedJobId,
+        jobId: generatedJobId,
+        bookingId: generatedBookingId,
+        extraData: {
+          'customer_id': clientUuid,
+          'provider_id': providerUuid,
+          'service_needed': serviceNeeded,
+        },
+      );
     } catch (e) {
-      debugPrint('>>> [BookingRepository.createHireRequest] Notification note: $e');
+      debugPrint('>>> [BookingRepository.createHireRequest] Notification note (non-fatal): $e');
     }
   }
 
   /// Updates status for a job, job_assignment, booking, or hire_request
-  /// and sends appropriate notifications (Phase 33).
+  /// and sends appropriate notifications (Phase 33 & FCM).
   Future<void> updateStatus(
     String requestId,
     String status, {
@@ -207,7 +230,7 @@ class BookingRepository {
       }
     } catch (_) {}
 
-    // Send notifications based on status transition (Phase 33)
+    // Send notifications based on status transition (Phase 33 & FCM)
     if (requestRecord != null) {
       final clientId = (requestRecord['client_id'] ?? requestRecord['customer_id'] ?? '').toString();
       final providerId = (requestRecord['provider_id'] ?? '').toString();
@@ -215,44 +238,107 @@ class BookingRepository {
       final clientName = (requestRecord['client_name'] ?? 'Customer').toString();
 
       if (status == 'accepted' && clientId.isNotEmpty) {
-        // Customer notification
-        await _notifRepo.createNotification(
-          userId: clientId,
-          title: 'Request Accepted',
-          body: '$providerName accepted your service request.',
-          type: 'hire_accepted',
-          data: {
-            'request_id': requestId,
-            'provider_id': providerId,
-            'customer_id': clientId,
-          },
-        );
-      } else if ((status == 'cancelled' || status == 'declined') && isProviderUpdating && clientId.isNotEmpty) {
-        // Provider declined request -> Notify customer
-        await _notifRepo.createNotification(
-          userId: clientId,
-          title: 'Request Declined',
-          body: '$providerName declined your service request.',
-          type: 'hire_declined',
-          data: {
-            'request_id': requestId,
-            'provider_id': providerId,
-            'customer_id': clientId,
-          },
-        );
+        // Customer notification: Provider accepted request
+        final notifTitle = 'Request Accepted';
+        final notifBody = '$providerName accepted your service request.';
+
+        try {
+          await _notifRepo.createNotification(
+            userId: clientId,
+            title: notifTitle,
+            body: notifBody,
+            type: 'hire_accepted',
+            data: {
+              'request_id': requestId,
+              'provider_id': providerId,
+              'customer_id': clientId,
+            },
+          );
+
+          await PushNotificationService().sendPushNotificationToUser(
+            recipientUserId: clientId,
+            senderUserId: providerId,
+            senderName: providerName,
+            title: notifTitle,
+            body: notifBody,
+            type: 'hire_accepted',
+            requestId: requestId,
+            extraData: {
+              'provider_id': providerId,
+              'customer_id': clientId,
+            },
+          );
+        } catch (e) {
+          debugPrint('>>> [BookingRepository.updateStatus] accepted notif note (non-fatal): $e');
+        }
+      } else if ((status == 'cancelled' || status == 'declined' || status == 'rejected') && isProviderUpdating && clientId.isNotEmpty) {
+        // Customer notification: Provider declined / rejected request
+        final notifTitle = 'Request Declined';
+        final notifBody = '$providerName declined your service request.';
+
+        try {
+          await _notifRepo.createNotification(
+            userId: clientId,
+            title: notifTitle,
+            body: notifBody,
+            type: 'hire_rejected',
+            data: {
+              'request_id': requestId,
+              'provider_id': providerId,
+              'customer_id': clientId,
+            },
+          );
+
+          await PushNotificationService().sendPushNotificationToUser(
+            recipientUserId: clientId,
+            senderUserId: providerId,
+            senderName: providerName,
+            title: notifTitle,
+            body: notifBody,
+            type: 'hire_rejected',
+            requestId: requestId,
+            extraData: {
+              'provider_id': providerId,
+              'customer_id': clientId,
+            },
+          );
+        } catch (e) {
+          debugPrint('>>> [BookingRepository.updateStatus] declined notif note (non-fatal): $e');
+        }
       } else if ((status == 'cancelled' || status == 'declined') && !isProviderUpdating && providerId.isNotEmpty) {
-        // Customer cancelled request -> Notify provider
-        await _notifRepo.createNotification(
-          userId: providerId,
-          title: 'Request Cancelled',
-          body: '$clientName cancelled the service request.',
-          type: 'hire_cancelled',
-          data: {
-            'request_id': requestId,
-            'provider_id': providerId,
-            'customer_id': clientId,
-          },
-        );
+        // Provider notification: Customer cancelled request
+        final notifTitle = 'Request Cancelled';
+        final notifBody = '$clientName cancelled the service request.';
+
+        try {
+          await _notifRepo.createNotification(
+            userId: providerId,
+            title: notifTitle,
+            body: notifBody,
+            type: 'hire_cancelled',
+            data: {
+              'request_id': requestId,
+              'provider_id': providerId,
+              'customer_id': clientId,
+            },
+          );
+
+          await PushNotificationService().sendPushNotificationToUser(
+            recipientUserId: providerId,
+            senderUserId: clientId,
+            senderName: clientName,
+            title: notifTitle,
+            body: notifBody,
+            type: 'hire_cancelled',
+            requestId: requestId,
+            extraData: {
+              'provider_id': providerId,
+              'customer_id': clientId,
+            },
+          );
+        } catch (e) {
+          debugPrint('>>> [BookingRepository.updateStatus] cancelled notif note (non-fatal): $e');
+        }
       }
     }
   }
@@ -397,46 +483,69 @@ class BookingRepository {
           .eq('technician_id', providerUuid)
           .order('created_at', ascending: false);
 
-      for (final assignment in assignments) {
-        final assignmentId = (assignment['id'] ?? '').toString();
-        if (assignmentId.isEmpty || seenIds.contains(assignmentId)) continue;
+      final validAssignments = assignments.where((a) {
+        final id = (a['id'] ?? '').toString();
+        return id.isNotEmpty && !seenIds.contains(id) && a['job_id'] != null;
+      }).toList();
 
-        final jobId = assignment['job_id'];
-        if (jobId == null) continue;
+      if (validAssignments.isNotEmpty) {
+        final jobIds = validAssignments.map((a) => a['job_id'].toString()).toSet().toList();
+        final Map<String, Map<String, dynamic>> jobsMap = {};
 
-        Map<String, dynamic>? job;
         try {
-          job = await _supabase.from('jobs').select().eq('id', jobId).maybeSingle();
-        } catch (e) {
-          debugPrint('>>> [BookingRepository.getProviderRequests] job lookup error: $e');
-        }
-        if (job == null) continue;
-
-        final customerId = (job['customer_id'] ?? '').toString();
-        String clientName = 'Customer';
-        String clientPhone = '';
-        if (customerId.isNotEmpty) {
-          final customer = await _userRepo.getUser(customerId);
-          if (customer != null) {
-            clientName = customer.name.isNotEmpty ? customer.name : clientName;
-            clientPhone = customer.phone;
+          final jobsData = await _supabase
+              .from('jobs')
+              .select()
+              .filter('id', 'in', jobIds);
+          for (final j in jobsData) {
+            jobsMap[j['id'].toString()] = Map<String, dynamic>.from(j);
           }
+        } catch (e) {
+          debugPrint('>>> [BookingRepository.getProviderRequests] batch jobs lookup note: $e');
         }
 
-        seenIds.add(assignmentId);
-        results.add({
-          'id': assignmentId,
-          'client_id': customerId,
-          'client_name': clientName,
-          'client_phone': clientPhone,
-          'provider_id': providerUuid,
-          'service_needed': job['title'] ?? 'Service',
-          'location': job['address'] ?? job['city'] ?? '',
-          'notes': job['description'] ?? '',
-          'status': assignment['status'] ?? job['status'] ?? 'requested',
-          'created_at': assignment['created_at'] ?? job['created_at'],
-          'updated_at': job['updated_at'],
-        });
+        // Parallelize customer profile fetches
+        final customerIds = jobsMap.values
+            .map((j) => (j['customer_id'] ?? '').toString())
+            .where((cid) => cid.isNotEmpty)
+            .toSet();
+
+        final Map<String, UserModel?> customerMap = {};
+        await Future.wait(customerIds.map((cid) async {
+          try {
+            final u = await _userRepo.getUser(cid);
+            customerMap[cid] = u;
+          } catch (_) {}
+        }));
+
+        for (final assignment in validAssignments) {
+          final assignmentId = (assignment['id'] ?? '').toString();
+          final jobId = assignment['job_id']?.toString();
+          final job = jobsMap[jobId];
+          if (job == null) continue;
+
+          final customerId = (job['customer_id'] ?? '').toString();
+          final customer = customerMap[customerId];
+          final clientName = customer != null && customer.name.isNotEmpty
+              ? customer.name
+              : 'Customer';
+          final clientPhone = customer?.phone ?? '';
+
+          seenIds.add(assignmentId);
+          results.add({
+            'id': assignmentId,
+            'client_id': customerId,
+            'client_name': clientName,
+            'client_phone': clientPhone,
+            'provider_id': providerUuid,
+            'service_needed': job['title'] ?? 'Service',
+            'location': job['address'] ?? job['city'] ?? '',
+            'notes': job['description'] ?? '',
+            'status': assignment['status'] ?? job['status'] ?? 'requested',
+            'created_at': assignment['created_at'] ?? job['created_at'],
+            'updated_at': job['updated_at'],
+          });
+        }
       }
     } catch (e) {
       debugPrint('>>> [BookingRepository.getProviderRequests] job_assignments query error: $e');

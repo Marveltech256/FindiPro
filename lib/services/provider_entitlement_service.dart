@@ -86,13 +86,13 @@ class ProviderEntitlementService {
   /// Whether the provider is entitled to Verified benefits.
   static bool isVerified(UserModel user) {
     if (!user.isProvider) return false;
-    return user.isVerifiedBadge;
+    return user.effectivePlan == 'verified' || user.isVerifiedBadge;
   }
 
   /// Whether the provider is entitled to Premium benefits.
   static bool isPremium(UserModel user) {
     if (!user.isProvider) return false;
-    return user.isPremiumBadge;
+    return user.effectivePlan == 'premium';
   }
 
   /// Maximum allowed portfolio / work images by plan:

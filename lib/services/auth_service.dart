@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide User;
@@ -5,6 +6,7 @@ import '../core/config/supabase_config.dart';
 import '../core/utils/uuid_utils.dart';
 import '../repositories/user_repository.dart';
 
+import 'presence_service.dart';
 import 'push_notification_service.dart';
 
 class AuthService {
@@ -32,14 +34,17 @@ class AuthService {
         try {
           await SupabaseConfig.client.from('profiles').update({
             'firebase_uid': user.uid,
+            'is_online': true,
+            'last_seen': DateTime.now().toUtc().toIso8601String(),
             'updated_at': DateTime.now().toUtc().toIso8601String(),
           }).eq('id', userUuid);
         } catch (e) {
           debugPrint('>>> [AuthService.ensureProfileSynced] Firebase UID profile link note: $e');
         }
 
-        // Sync FCM push token for existing session
+        // Sync FCM push token and presence for existing session
         PushNotificationService().syncTokenForUser(user.uid);
+        PresenceService().setOnline(user.uid);
         return;
       }
 
@@ -57,6 +62,8 @@ class AuthService {
         'phone': user.phoneNumber ?? '',
         'avatar_url': user.photoURL,
         'role': 'customer',
+        'is_online': true,
+        'last_seen': DateTime.now().toUtc().toIso8601String(),
         'created_at': DateTime.now().toUtc().toIso8601String(),
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       };
@@ -69,8 +76,9 @@ class AuthService {
         debugPrint('>>> [AuthService.ensureProfileSynced] Self-heal general error: $e');
       }
 
-      // Sync FCM push token for new profile
+      // Sync FCM push token and presence for new profile
       PushNotificationService().syncTokenForUser(user.uid);
+      PresenceService().setOnline(user.uid);
     } catch (e) {
       debugPrint('>>> [AuthService.ensureProfileSynced] Profile check note: $e');
     }
@@ -86,8 +94,15 @@ class AuthService {
     debugPrint('>>> [AuthService.login] Firebase auth SUCCESS! User UID: ${user?.uid}');
 
     if (user != null) {
-      await ensureProfileSynced(user);
-      await PushNotificationService().syncTokenForUser(user.uid);
+      unawaited(() async {
+        try {
+          await ensureProfileSynced(user);
+          await PushNotificationService().syncTokenForUser(user.uid);
+          await PresenceService().setOnline(user.uid);
+        } catch (e) {
+          debugPrint('>>> [AuthService.login] Background sync note: $e');
+        }
+      }());
     }
 
     return credential;
@@ -122,6 +137,8 @@ class AuthService {
       'phone': phone.trim(),
       'avatar_url': null,
       'role': normalizedRole,
+      'is_online': true,
+      'last_seen': DateTime.now().toUtc().toIso8601String(),
       'created_at': DateTime.now().toUtc().toIso8601String(),
       'updated_at': DateTime.now().toUtc().toIso8601String(),
     };
@@ -138,6 +155,7 @@ class AuthService {
     }
 
     await PushNotificationService().syncTokenForUser(user.uid);
+    await PresenceService().setOnline(user.uid);
 
     return credential;
   }
@@ -147,6 +165,13 @@ class AuthService {
   Future<void> logout() async {
     debugPrint('>>> [AuthService.logout] Logging out user');
     final currentUserId = _auth.currentUser?.uid;
+    if (currentUserId != null) {
+      try {
+        await PresenceService().setOffline(currentUserId);
+      } catch (e) {
+        debugPrint('>>> [AuthService.logout] Presence offline note: $e');
+      }
+    }
     try {
       await PushNotificationService().deactivateToken(userId: currentUserId);
     } catch (e) {

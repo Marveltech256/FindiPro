@@ -1,10 +1,16 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../core/utils/uuid_utils.dart';
+import '../core/widgets/report_dialog.dart';
 import '../models/chat_message.dart';
+import '../models/user_model.dart';
 import '../repositories/message_repository.dart';
 import '../repositories/user_repository.dart';
+import '../services/presence_service.dart';
 import 'auth/login_screen.dart';
+import 'quotation/quotation_maker_screen.dart';
+import 'quotation/quotations_list_screen.dart';
+import 'quotation/request_quotation_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String? conversationId;
@@ -112,6 +118,90 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  void _showQuotationActions() async {
+    final otherUser = await _userRepo.getUser(widget.otherUserId);
+    if (!mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Wrap(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.receipt_long, color: Color(0xFF06B6D4)),
+                  const SizedBox(width: 10),
+                  Text('Quotations & Invoices', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.request_quote_outlined, color: Color(0xFF06B6D4)),
+              title: const Text('Request Quotation from Partner'),
+              subtitle: const Text('Ask for a formal price estimate for a job'),
+              onTap: () {
+                Navigator.pop(ctx);
+                if (otherUser != null) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => RequestQuotationScreen(
+                        provider: otherUser,
+                        conversationId: widget.conversationId,
+                        bookingId: widget.bookingId,
+                      ),
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Could not load user details.')),
+                  );
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.post_add, color: Color(0xFF10B981)),
+              title: const Text('Create & Send Invoice / Quotation'),
+              subtitle: const Text('Use standard invoice maker or upload document'),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => QuotationMakerScreen(
+                      clientId: widget.otherUserId,
+                      clientName: _displayName ?? 'Client',
+                      conversationId: widget.conversationId,
+                      bookingId: widget.bookingId,
+                    ),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_open, color: Colors.amber),
+              title: const Text('View Quotations & Invoices History'),
+              subtitle: const Text('All pending, accepted and sent invoices'),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const QuotationsListScreen(),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _formatTime(DateTime dt) {
     final hour = dt.hour.toString().padLeft(2, '0');
     final minute = dt.minute.toString().padLeft(2, '0');
@@ -159,54 +249,191 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 0,
-        title: Row(
-          children: [
-            ClipOval(
-              child: SizedBox(
-                width: 36,
-                height: 36,
-                child: (_photoUrl != null && _photoUrl!.isNotEmpty)
-                    ? Image.network(
-                        _photoUrl!,
-                        width: 36,
-                        height: 36,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          color: Colors.grey.shade200,
-                          child: const Icon(Icons.person, size: 20, color: Colors.grey),
-                        ),
-                      )
-                    : Container(
-                        color: Colors.grey.shade200,
-                        child: const Icon(Icons.person, size: 20, color: Colors.grey),
+        title: StreamBuilder<Map<String, dynamic>>(
+          stream: PresenceService().watchPresence(widget.otherUserId),
+          builder: (context, presenceSnap) {
+            final isOnline = presenceSnap.data?['is_online'] == true;
+            final lastSeen = presenceSnap.data?['last_seen'] as DateTime?;
+            final presenceText = UserModel.formatPresence(isOnline: isOnline, lastSeen: lastSeen);
+
+            return Row(
+              children: [
+                Stack(
+                  children: [
+                    ClipOval(
+                      child: SizedBox(
+                        width: 38,
+                        height: 38,
+                        child: (_photoUrl != null && _photoUrl!.isNotEmpty)
+                            ? Image.network(
+                                _photoUrl!,
+                                width: 38,
+                                height: 38,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(
+                                  color: Colors.grey.shade200,
+                                  child: const Icon(Icons.person, size: 22, color: Colors.grey),
+                                ),
+                              )
+                            : Container(
+                                color: Colors.grey.shade200,
+                                child: const Icon(Icons.person, size: 22, color: Colors.grey),
+                              ),
                       ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _displayName ?? 'Chat',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (_category != null && _category!.isNotEmpty)
-                    Text(
-                      _category!,
-                      style: const TextStyle(fontSize: 11, color: Color(0xFF06B6D4)),
-                      overflow: TextOverflow.ellipsis,
                     ),
-                ],
-              ),
-            ),
-          ],
+                    if (isOnline)
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Theme.of(context).scaffoldBackgroundColor,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _displayName ?? 'Chat',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Row(
+                        children: [
+                          if (isOnline) ...[
+                            Container(
+                              width: 7,
+                              height: 7,
+                              margin: const EdgeInsets.only(right: 4),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF10B981),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            Text(
+                              'Online',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF10B981),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ] else ...[
+                            Text(
+                              presenceText,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Theme.of(context).colorScheme.onSurface.withAlpha(153),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                          if (_category != null && _category!.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Text(
+                              '• $_category',
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF06B6D4)),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
         ),
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (val) {
+              if (val == 'quotations') {
+                _showQuotationActions();
+              } else if (val == 'report') {
+                showReportUserDialog(
+                  context,
+                  reportedUserId: widget.otherUserId,
+                  reportedUserName: _displayName ?? 'User',
+                );
+              }
+            },
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(
+                value: 'quotations',
+                child: Row(
+                  children: [
+                    Icon(Icons.receipt_long, color: Color(0xFF06B6D4), size: 20),
+                    SizedBox(width: 8),
+                    Text('Quotations & Invoices'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'report',
+                child: Row(
+                  children: [
+                    Icon(Icons.shield_outlined, color: Colors.red, size: 20),
+                    SizedBox(width: 8),
+                    Text('Report User', style: TextStyle(color: Colors.red)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
       body: Column(
         children: [
+          StreamBuilder<Map<String, dynamic>>(
+            stream: PresenceService().watchPresence(widget.otherUserId),
+            builder: (context, presenceSnap) {
+              final isOnline = presenceSnap.data?['is_online'] == true;
+              final lastSeen = presenceSnap.data?['last_seen'] as DateTime?;
+              if (!isOnline && lastSeen != null) {
+                final diffDays = DateTime.now().difference(lastSeen).inDays;
+                if (diffDays >= 14) {
+                  return Container(
+                    width: double.infinity,
+                    color: const Color(0xFFFEF3C7),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline, size: 16, color: Color(0xFFD97706)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Notice: This user has been inactive for $diffDays days and may take longer to respond.',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF92400E),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+              }
+              return const SizedBox.shrink();
+            },
+          ),
           Expanded(
             child: StreamBuilder<List<ChatMessage>>(
               stream: _repo.getMessages(
@@ -271,7 +498,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                         decoration: BoxDecoration(
-                          color: isMe ? const Color(0xFF06B6D4) : Theme.of(context).colorScheme.surfaceContainerHighest,
+                          color: isMe ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.only(
                             topLeft: const Radius.circular(18),
                             topRight: const Radius.circular(18),
@@ -285,7 +512,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             Text(
                               message.text,
                               style: TextStyle(
-                                color: isMe ? Colors.white : Theme.of(context).colorScheme.onSurface,
+                                color: isMe ? Theme.of(context).colorScheme.onPrimary : Theme.of(context).colorScheme.onSurface,
                                 fontSize: 15,
                                 height: 1.3,
                               ),
@@ -298,7 +525,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                   _formatTime(message.createdAt),
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: isMe ? Colors.white70 : Theme.of(context).colorScheme.onSurface.withAlpha(110),
+                                    color: isMe ? Theme.of(context).colorScheme.onPrimary.withAlpha(200) : Theme.of(context).colorScheme.onSurface.withAlpha(110),
                                   ),
                                 ),
                                 if (isMe) ...[
@@ -306,11 +533,47 @@ class _ChatScreenState extends State<ChatScreen> {
                                   Icon(
                                     message.isRead ? Icons.done_all : Icons.done,
                                     size: 13,
-                                    color: message.isRead ? Colors.white : Colors.white70,
+                                    color: message.isRead ? Theme.of(context).colorScheme.onPrimary : Theme.of(context).colorScheme.onPrimary.withAlpha(180),
                                   ),
                                 ],
                               ],
                             ),
+                            if (message.text.contains('[Official Quotation:') ||
+                                message.text.contains('[Quotation Request:') ||
+                                message.text.contains('[Quotation Accepted]')) ...[
+                              const SizedBox(height: 8),
+                              InkWell(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => const QuotationsListScreen()),
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: isMe ? Colors.white.withAlpha(40) : const Color(0xFF06B6D4).withAlpha(30),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.visibility_outlined, size: 14, color: isMe ? Colors.white : const Color(0xFF06B6D4)),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'View Quotation / Invoice',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: isMe ? Colors.white : const Color(0xFF06B6D4),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -321,20 +584,24 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           SafeArea(
+            top: false,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(12),
-                    offset: const Offset(0, -2),
-                    blurRadius: 6,
+                color: Theme.of(context).scaffoldBackgroundColor,
+                border: Border(
+                  top: BorderSide(
+                    color: Theme.of(context).dividerColor.withAlpha(30),
                   ),
-                ],
+                ),
               ),
               child: Row(
                 children: [
+                  IconButton(
+                    icon: const Icon(Icons.receipt_long, color: Color(0xFF06B6D4), size: 24),
+                    tooltip: 'Quotations & Invoices',
+                    onPressed: _showQuotationActions,
+                  ),
                   Expanded(
                     child: TextField(
                       controller: _text,
@@ -356,7 +623,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
                   const SizedBox(width: 8),
                   CircleAvatar(
-                    backgroundColor: const Color(0xFF06B6D4),
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                     child: IconButton(
                       icon: _sending
                           ? const SizedBox(

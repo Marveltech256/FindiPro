@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../core/widgets/findipro_logo.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/provider_entitlement_service.dart';
@@ -123,15 +126,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               const SizedBox(height: 18),
               Row(
                 children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF06B6D4).withAlpha(30),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.handyman_rounded, color: Color(0xFF06B6D4), size: 28),
-                  ),
+                  const FindiProLogo.icon(size: 48),
                   const SizedBox(width: 14),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -209,7 +204,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) {
         return DraggableScrollableSheet(
           expand: false,
-          initialChildSize: 0.75,
+          initialChildSize: 0.85,
           minChildSize: 0.5,
           maxChildSize: 0.95,
           builder: (_, controller) {
@@ -234,33 +229,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Last updated: August 2026',
+                  'Compliant with US & EU Consumer Laws • Last updated: August 2026',
                   style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withAlpha(140)),
                 ),
                 const SizedBox(height: 16),
                 _legalSection(
-                  '1. Platform Agreement',
-                  'By accessing or using FindiPro, you agree to comply with and be bound by these Terms of Service. FindiPro operates as an intermediary marketplace facilitating connections between service clients and independent service professionals.',
+                  '1. Platform Agreement & Intermediary Role',
+                  'By accessing or using FindiPro, you agree to comply with and be bound by these Terms of Service. FindiPro operates as an intermediary technology platform facilitating discovery and direct communication between service clients and independent service professionals. FindiPro does not employ service providers and does not guarantee independent third-party performance.',
                 ),
                 _legalSection(
-                  '2. Account & Registration',
-                  'Users must provide accurate, current, and complete registration information. You are responsible for safeguarding your credentials and for all activities that occur under your account.',
+                  '2. Eligibility & Age Requirements (US & EU)',
+                  'You must be at least 18 years old (or the legal age of majority in your jurisdiction) to create an account, hire professionals, or offer services. If you are between 13 and 17, you may use FindiPro only under the active supervision and legal consent of a parent or guardian. Children under 13 are prohibited from registering.',
                 ),
                 _legalSection(
-                  '3. Service Requests & Engagement',
-                  'Clients may browse providers and submit hire requests. Service agreements, scopes, timelines, and deliverables are agreed directly between the client and provider.',
+                  '3. Service Requests & Marketplace Transactions',
+                  'Clients can browse verified providers and submit hire requests. Service scopes, deliverables, rates, and completion terms are agreed upon directly between the client and provider. Providers represent that they possess all required professional licenses, registrations, and insurance required by local and federal laws.',
                 ),
                 _legalSection(
-                  '4. Provider Standards & Badges',
-                  'Service providers agree to deliver quality services with professional integrity. Verification badges (Verified & Premium) indicate platform verification tier and identity status.',
+                  '4. Statutory Consumer Protection (EU & US Rights)',
+                  'Nothing in these terms limits or waives any mandatory statutory rights granted to consumers under the EU Consumer Rights Directive (2011/83/EU), Directive (EU) 2019/770 on digital contracts, or applicable US federal and state consumer protection statutes.',
                 ),
                 _legalSection(
-                  '5. Reviews & Community Guidelines',
-                  'Users may leave honest, respectful reviews following completed services. Fake, harassing, fraudulent, or abusive content will result in immediate suspension.',
+                  '5. EU Digital Services Act (DSA) & Content Moderation',
+                  'In compliance with EU Regulation (EU) 2022/2065 (Digital Services Act), FindiPro maintains a zero-tolerance policy for fraudulent services, harassment, hate speech, and illegal content. Users and authorities can submit notice of suspected illegal content directly to legal@findipro.com. Identified infringing listings are suspended or removed expeditiously.',
                 ),
                 _legalSection(
-                  '6. Termination',
-                  'FindiPro reserves the right to suspend or terminate accounts that violate our terms, engage in fraudulent transactions, or compromise community safety.',
+                  '6. Warranties & Limitation of Liability',
+                  'To the fullest extent permitted by law, FindiPro provides the application on an "as is" and "as available" basis without warranties of any kind. FindiPro disclaims liability for indirect, incidental, or punitive damages arising from provider engagements, without limiting non-waivable liability under consumer protection regulations.',
+                ),
+                _legalSection(
+                  '7. Account Suspension & Termination',
+                  'FindiPro reserves the right to suspend or terminate accounts that breach these Terms, commit fraud, or pose safety hazards to community members. Users may terminate their agreement at any time by deleting their account in Settings.',
+                ),
+                _legalSection(
+                  '8. Governing Law & Dispute Resolution',
+                  'EU consumers benefit from mandatory provisions of the law of their country of residence and may utilize the European Commission Online Dispute Resolution platform. US users agree that disputes are resolved in accordance with applicable federal and state arbitration standards, preserving access to small claims courts.',
                 ),
                 const SizedBox(height: 20),
                 SizedBox(
@@ -272,7 +275,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: () => Navigator.pop(ctx),
-                    child: const Text('I Understand', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: const Text('I Understand & Agree', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
@@ -295,7 +298,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) {
         return DraggableScrollableSheet(
           expand: false,
-          initialChildSize: 0.75,
+          initialChildSize: 0.85,
           minChildSize: 0.5,
           maxChildSize: 0.95,
           builder: (_, controller) {
@@ -315,34 +318,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Privacy Policy',
+                  'Privacy Policy & Data Rights',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Last updated: August 2026',
+                  'Compliant with EU GDPR & US CCPA/CPRA • Last updated: August 2026',
                   style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withAlpha(140)),
                 ),
                 const SizedBox(height: 16),
                 _legalSection(
-                  '1. Information We Collect',
-                  'We collect profile information you provide during registration (name, email, phone number, role, location), portfolio images, service listings, messages, and transaction history.',
+                  '1. Data Controller & Privacy Contact',
+                  'FindiPro acts as the Data Controller under Regulation (EU) 2016/679 (GDPR). For inquiries, exercising privacy rights, or questions, please contact our Data Protection Officer at privacy@findipro.com.',
                 ),
                 _legalSection(
-                  '2. How We Use Information',
-                  'Your information is used to facilitate marketplace discovery, enable secure client-provider messaging, process service requests, display verified reviews, and improve app functionality.',
+                  '2. Categories of Personal Information Collected',
+                  '• Identifiers: Name, email address, phone number, and unique account ID.\n'
+                  '• Professional & Profile Data: Bio, category/skills, verified tier, and portfolio imagery.\n'
+                  '• Geolocation Data: Approximate and coarse location used solely to calculate distances to nearby professionals.\n'
+                  '• Communications: Direct messages exchanged between clients and service providers.\n'
+                  '• Technical Diagnostics: Device model, operating system version, and crash telemetry.',
                 ),
                 _legalSection(
-                  '3. Location Data',
-                  'Location information is utilized to help clients discover nearby professionals and calculate approximate distances. Precise GPS coordinates are not shared publicly.',
+                  '3. Legal Bases for Processing (EU GDPR Art. 6)',
+                  'We process personal data strictly under valid legal bases:\n'
+                  '• Contract Performance: Fulfilling account creation, service hire requests, and messaging.\n'
+                  '• Legitimate Interests: Preventing fraud, verifying badges, and maintaining platform security.\n'
+                  '• Legal Compliance: Satisfying accounting, tax, and regulatory obligations.\n'
+                  '• Consent: Location queries and device push notifications (revocable anytime).',
                 ),
                 _legalSection(
-                  '4. Data Security & Storage',
-                  'We implement industry-standard encryption, Firebase Authentication, and secure Supabase database infrastructure to safeguard your personal data.',
+                  '4. European Union (GDPR) Data Subject Rights',
+                  'EEA and UK users have explicit statutory rights under Articles 15-22 of the GDPR:\n'
+                  '• Right of Access (Art. 15): View your personal data records.\n'
+                  '• Right to Rectification (Art. 16): Update profile information at any time.\n'
+                  '• Right to Erasure / "To Be Forgotten" (Art. 17): Permanently delete your account and associated data.\n'
+                  '• Right to Restriction & Right to Object (Arts. 18 & 21): Limit or object to certain processing.\n'
+                  '• Right to Data Portability (Art. 20): Export data in machine-readable JSON format.\n'
+                  '• Right to Lodge a Complaint: File a grievance with your local EU Data Protection Authority.',
                 ),
                 _legalSection(
-                  '5. Your Rights & Deletion',
-                  'You have the right to access, edit, or permanently delete your account and personal profile data at any time through the Account Actions menu in Settings.',
+                  '5. US State Privacy Rights (CCPA / CPRA & CalOPPA)',
+                  'For California and US residents:\n'
+                  '• No Sale or Share of Data: FindiPro does NOT sell personal information and does NOT share personal data for cross-context behavioral advertising.\n'
+                  '• Right to Know & Delete: Request disclosure or permanent deletion of data collected in the preceding 12 months.\n'
+                  '• Non-Discrimination: We never deny service or alter rates for exercising privacy rights.',
+                ),
+                _legalSection(
+                  '6. Children’s Privacy (COPPA Compliance)',
+                  'FindiPro is not intended for children under 13 (or under 16 in certain EU member states). We do not knowingly collect personal information from children under 13. If you believe a child has provided us data, please contact privacy@findipro.com for immediate deletion.',
+                ),
+                _legalSection(
+                  '7. Data Security & International Transfers',
+                  'Personal data is encrypted in transit (TLS 1.3/HTTPS) and protected by enterprise security standards. Where cross-border data transfers occur, we utilize European Commission Standard Contractual Clauses (SCCs).',
+                ),
+                _legalSection(
+                  '8. Data Deletion (Google Play Compliance)',
+                  'Users may permanently delete their account and associated data directly within the app via Settings > Delete Account, or submit an external deletion request by emailing privacy@findipro.com.',
                 ),
                 const SizedBox(height: 20),
                 SizedBox(
@@ -360,6 +392,119 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             );
           },
+        );
+      },
+    );
+  }
+
+  void _exportUserData() {
+    final theme = Theme.of(context);
+    final dataMap = {
+      'exported_at': DateTime.now().toUtc().toIso8601String(),
+      'user_id': widget.user.uid,
+      'name': widget.user.name,
+      'email': widget.user.email,
+      'phone': widget.user.phone,
+      'role': widget.user.role,
+      'location': widget.user.location ?? '',
+      'bio': widget.user.bio ?? '',
+      'plan': widget.user.plan,
+      'verified': widget.user.verified,
+      'compliance_status': 'Compliant with GDPR Art. 20 (Data Portability) & CCPA Right to Access',
+    };
+    final jsonString = const JsonEncoder.withIndent('  ').convert(dataMap);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: theme.cardTheme.color ?? theme.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.outline.withAlpha(80),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Row(
+                children: [
+                  Icon(Icons.download_outlined, color: Color(0xFF06B6D4), size: 24),
+                  SizedBox(width: 8),
+                  Text(
+                    'Export Personal Data',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'In accordance with EU GDPR (Article 20) and US CCPA/CPRA, here is your portable data record.',
+                style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurface.withAlpha(150)),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.surfaceContainerHighest.withAlpha(120),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: theme.colorScheme.outline.withAlpha(50)),
+                ),
+                constraints: const BoxConstraints(maxHeight: 220),
+                child: SingleChildScrollView(
+                  child: SelectableText(
+                    jsonString,
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.copy, size: 16),
+                      label: const Text('Copy JSON'),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: jsonString));
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Personal data copied to clipboard.'),
+                            backgroundColor: Color(0xFF06B6D4),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF06B6D4),
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Done'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         );
       },
     );
@@ -443,10 +588,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               SizedBox(height: 8),
               Text(
                 'Deleting your account will:\n'
-                '• Permanently deactivate your profile\n'
-                '• Remove your public service listings\n'
-                '• Clear your contact details and portfolio\n'
-                '• Immediately sign you out of FindiPro',
+                '• Permanently deactivate and purge your profile data\n'
+                '• Remove your public service listings and media\n'
+                '• Delete your contact details and active sessions (GDPR Art. 17 / CCPA)\n'
+                '• Immediately sign you out of FindiPro on all devices',
                 style: TextStyle(fontSize: 13, height: 1.4),
               ),
             ],
@@ -792,6 +937,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ListTile(
                         leading: const CircleAvatar(
                           radius: 18,
+                          backgroundColor: Color(0xFF06B6D4),
+                          child: Icon(Icons.share_outlined, color: Colors.white, size: 20),
+                        ),
+                        title: const Text('Share FindiPro with Friends', style: TextStyle(fontWeight: FontWeight.w600)),
+                        subtitle: const Text('Invite clients and providers to join FindiPro', style: TextStyle(fontSize: 12)),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () {
+                          Clipboard.setData(const ClipboardData(
+                            text: 'Hey! Check out FindiPro to find and hire verified service professionals in Uganda: https://play.google.com/store/apps/details?id=com.findipro.app',
+                          ));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('FindiPro invitation link copied to clipboard!')),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const CircleAvatar(
+                          radius: 18,
                           backgroundColor: Color(0xFF25D366),
                           child: Icon(Icons.chat, color: Colors.white, size: 20),
                         ),
@@ -864,6 +1028,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     children: [
                       ListTile(
+                        leading: const Icon(Icons.download_outlined, color: Color(0xFF06B6D4)),
+                        title: const Text(
+                          'Export My Data',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: const Text('Download portable data record (GDPR Art. 20 / CCPA)', style: TextStyle(fontSize: 12)),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: _exportUserData,
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
                         leading: const Icon(Icons.logout, color: Colors.orange),
                         title: const Text(
                           'Log Out',
@@ -880,7 +1055,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           'Delete Account',
                           style: TextStyle(fontWeight: FontWeight.w600, color: Colors.red),
                         ),
-                        subtitle: const Text('Permanently remove your account and data', style: TextStyle(fontSize: 12)),
+                        subtitle: const Text('Permanently erase account & data (GDPR Art. 17 / CCPA)', style: TextStyle(fontSize: 12)),
                         trailing: const Icon(Icons.chevron_right, color: Colors.red),
                         onTap: _confirmDeleteAccount,
                       ),

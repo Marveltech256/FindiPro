@@ -1,14 +1,16 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../models/user_model.dart';
 import '../../repositories/user_repository.dart';
 import '../../services/location_service.dart';
-import '../Provider/provider_detail_screen.dart';
+import '../provider/provider_detail_screen.dart';
 import '../category_providers_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../../core/utils/category_icons.dart';
 import '../../repositories/notification_repository.dart';
+import '../../services/analytics_service.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -41,16 +43,27 @@ class _ExploreScreenState extends State<ExploreScreen> {
   String _searchQuery = '';
   String _locationQuery = '';
 
+  StreamSubscription<User?>? _authSub;
+
   @override
   void initState() {
     super.initState();
     _useLocation();
     _loadMe();
+
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((_) {
+      if (mounted) {
+        _loadMe();
+      }
+    });
   }
 
   Future<void> _loadMe() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    if (uid == null) {
+      if (mounted) setState(() => _me = null);
+      return;
+    }
     final me = await _repo.getUser(uid);
     if (mounted) {
       setState(() => _me = me);
@@ -59,6 +72,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _search.dispose();
     super.dispose();
   }
@@ -170,19 +184,33 @@ class _ExploreScreenState extends State<ExploreScreen> {
                         },
                       ),
                       const SizedBox(width: 8),
-                      CircleAvatar(
-                        backgroundImage: (_me?.photoUrl != null && _me!.photoUrl!.isNotEmpty)
-                            ? NetworkImage(_me!.photoUrl!)
-                            : null,
-                        child: (_me?.photoUrl == null || _me!.photoUrl!.isEmpty)
-                            ? const Icon(Icons.person)
-                            : null,
+                      ClipOval(
+                        child: SizedBox(
+                          width: 42,
+                          height: 42,
+                          child: (_me?.photoUrl != null && _me!.photoUrl!.isNotEmpty)
+                              ? Image.network(
+                                  _me!.photoUrl!,
+                                  width: 42,
+                                  height: 42,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (_, __, ___) => Container(
+                                    color: const Color(0xFF06B6D4).withAlpha(30),
+                                    child: const Icon(Icons.person, color: Color(0xFF06B6D4)),
+                                  ),
+                                )
+                              : Container(
+                                  color: const Color(0xFF06B6D4).withAlpha(30),
+                                  child: const Icon(Icons.person, color: Color(0xFF06B6D4)),
+                                ),
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 22),
                   // Search Fields
                   TextField(
+                    controller: _search,
                     decoration: InputDecoration(
                       hintText: 'Search services or providers',
                       prefixIcon: const Icon(Icons.search),
@@ -194,7 +222,38 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     ),
                     onChanged: (value) {
                       setState(() => _searchQuery = value);
+                      if (value.trim().length >= 3) {
+                        AnalyticsService().trackSearch(query: value);
+                      }
                     },
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 32,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        const Padding(
+                          padding: EdgeInsets.only(right: 6, top: 6),
+                          child: Text('Suggested:', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
+                        ),
+                        ...['Plumbing', 'Electrical', 'Cleaning', 'Mechanic', 'Painting', 'Ntinda', 'Kampala'].map((s) => Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: ActionChip(
+                                label: Text(s, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+                                padding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                                backgroundColor: Theme.of(context).cardColor,
+                                side: BorderSide(color: const Color(0xFF06B6D4).withAlpha(50)),
+                                onPressed: () {
+                                  _search.text = s;
+                                  setState(() => _searchQuery = s);
+                                  AnalyticsService().trackSearch(query: s);
+                                },
+                              ),
+                            )),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -282,9 +341,17 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     }).toList();
 
                     if (filteredProviders.isEmpty) {
-                      return const Padding(
-                        padding: EdgeInsets.all(30),
-                        child: Center(child: Text('No providers match your search.')),
+                      return Padding(
+                        padding: const EdgeInsets.all(30),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              Icon(Icons.search_off, size: 48, color: Colors.grey.shade400),
+                              const SizedBox(height: 10),
+                              const Text('No providers match your search.', style: TextStyle(color: Colors.grey)),
+                            ],
+                          ),
+                        ),
                       );
                     }
 
@@ -308,22 +375,32 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   Widget _categoryTile(BuildContext c, String name) => InkWell(
         onTap: () => Navigator.push(c, MaterialPageRoute(builder: (_) => CategoryProvidersScreen(category: name))),
+        borderRadius: BorderRadius.circular(18),
         child: Container(
           width: 110,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: Theme.of(context).cardColor,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.black12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(12),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+            border: Border.all(color: Theme.of(context).dividerColor.withAlpha(40)),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(categoryIcon(name), color: const Color(0xFF06B6D4)),
+              Icon(categoryIcon(name), color: const Color(0xFF06B6D4), size: 28),
               const SizedBox(height: 8),
               Text(
                 name,
                 textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
               ),
             ],
@@ -347,7 +424,18 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(15),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
       child: Material(
+        color: Theme.of(c).cardColor,
         borderRadius: BorderRadius.circular(22),
         child: InkWell(
           borderRadius: BorderRadius.circular(22),
@@ -356,10 +444,26 @@ class _ExploreScreenState extends State<ExploreScreen> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 34,
-                  backgroundImage: hasPhoto ? NetworkImage(p.photoUrl!) : null,
-                  child: !hasPhoto ? const Icon(Icons.person, size: 34) : null,
+                ClipOval(
+                  child: SizedBox(
+                    width: 64,
+                    height: 64,
+                    child: hasPhoto
+                        ? Image.network(
+                            p.photoUrl!,
+                            width: 64,
+                            height: 64,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              color: const Color(0xFF06B6D4).withAlpha(25),
+                              child: const Icon(Icons.person, size: 34, color: Color(0xFF06B6D4)),
+                            ),
+                          )
+                        : Container(
+                            color: const Color(0xFF06B6D4).withAlpha(25),
+                            child: const Icon(Icons.person, size: 34, color: Color(0xFF06B6D4)),
+                          ),
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -369,29 +473,47 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       Row(
                         children: [
                           Expanded(
-                            child: Text(
-                              p.businessName?.isNotEmpty == true ? p.businessName! : p.name,
-                              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    p.businessName?.isNotEmpty == true ? p.businessName! : (p.name.isNotEmpty ? p.name : 'Service Provider'),
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (p.isPremiumBadge) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFD97706).withAlpha(30),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: const Color(0xFFD97706), width: 0.8),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.stars, color: Color(0xFFD97706), size: 12),
+                                        SizedBox(width: 3),
+                                        Text(
+                                          'PREMIUM',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFFD97706),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ] else if (p.isVerifiedBadge) ...[
+                                  const SizedBox(width: 4),
+                                  const Icon(Icons.verified, color: Colors.blue, size: 18),
+                                ],
+                              ],
                             ),
                           ),
-                          if (p.isPremiumBadge)
-                            const Padding(
-                              padding: EdgeInsets.only(left: 4),
-                              child: Icon(
-                                Icons.stars,
-                                color: Color(0xFFD97706),
-                                size: 20,
-                              ),
-                            )
-                          else if (p.isVerifiedBadge)
-                            const Padding(
-                              padding: EdgeInsets.only(left: 4),
-                              child: Icon(
-                                Icons.verified,
-                                color: Colors.blue,
-                                size: 20,
-                              ),
-                            ),
                         ],
                       ),
                       const SizedBox(height: 4),

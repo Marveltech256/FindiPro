@@ -12,11 +12,16 @@ import 'package:findipro/models/verification_request.dart';
 import 'package:findipro/repositories/service_repository.dart';
 import 'package:findipro/services/location_service.dart';
 import 'package:findipro/services/provider_entitlement_service.dart';
+import 'package:findipro/services/push_notification_service.dart';
 import 'package:findipro/services/subscription_payment_service.dart';
 import 'package:findipro/services/theme_service.dart';
 import 'package:findipro/core/utils/uuid_utils.dart';
 
 void main() {
+  setUp(() {
+    UserModel.isLaunchPromotionActive = false;
+  });
+
   group('UuidUtils Tests', () {
     test('Converts Firebase UID deterministically to a valid RFC 4122 UUID', () {
       final uuid1 = UuidUtils.firebaseUidToUuid('abc12345FirebaseUid');
@@ -454,7 +459,7 @@ void main() {
       );
 
       expect(premiumProvider.effectivePlan, 'premium');
-      expect(premiumProvider.isPremiumBadge, true);
+      expect(premiumProvider.isPremiumBadge, false); // Hidden during promotional offer
       expect(ProviderEntitlementService.isPremium(premiumProvider), true);
       expect(ProviderEntitlementService.getPortfolioImageLimit(premiumProvider), 10);
       expect(ProviderEntitlementService.hasPriorityRanking(premiumProvider), true);
@@ -481,6 +486,24 @@ void main() {
       expect(expiredPremium.isPremiumBadge, false);
       expect(ProviderEntitlementService.hasPriorityRanking(expiredPremium), false);
       expect(ProviderEntitlementService.getPortfolioImageLimit(expiredPremium), 2);
+    });
+
+    test('Early bird launch promotion unlocks Premium capabilities for all providers with clean badge', () {
+      UserModel.isLaunchPromotionActive = true;
+      const basicProvider = UserModel(
+        uid: 'p_promo',
+        name: 'Promo Peter',
+        email: 'peter@example.com',
+        role: 'provider',
+        plan: 'basic',
+        subscriptionStatus: 'active',
+      );
+      expect(basicProvider.effectivePlan, 'premium');
+      expect(basicProvider.isPremiumBadge, false); // Invisible promotional badge
+      expect(ProviderEntitlementService.isPremium(basicProvider), true);
+      expect(ProviderEntitlementService.hasAnalytics(basicProvider), true);
+      expect(ProviderEntitlementService.getPortfolioImageLimit(basicProvider), 10);
+      UserModel.isLaunchPromotionActive = false;
     });
   });
 
@@ -880,7 +903,7 @@ void main() {
       );
 
       expect(premiumUser.effectivePlan, 'premium');
-      expect(premiumUser.isPremiumBadge, true);
+      expect(premiumUser.isPremiumBadge, false);
       expect(ProviderEntitlementService.hasAnalytics(premiumUser), true);
       expect(ProviderEntitlementService.getPortfolioImageLimit(premiumUser), 10);
       expect(ProviderEntitlementService.hasPriorityRanking(premiumUser), true);
@@ -942,7 +965,7 @@ void main() {
         subscriptionExpiresAt: now.add(const Duration(days: 30)),
       );
       expect(renewedUser.effectivePlan, 'premium');
-      expect(renewedUser.isPremiumBadge, true);
+      expect(renewedUser.isPremiumBadge, false);
       expect(ProviderEntitlementService.hasAnalytics(renewedUser), true);
       expect(ProviderEntitlementService.getPortfolioImageLimit(renewedUser), 10);
     });
@@ -1006,6 +1029,293 @@ void main() {
       );
       expect(failedSub.isFailed, true);
       expect(failedSub.isActive, false);
+    });
+  });
+
+  group('FCM Push Notification & Chat Integration Tests', () {
+    test('FCM token payload serializes correctly with platform and user UUID', () {
+      final userUuid = UuidUtils.firebaseUidToUuid('firebase-test-uid-123');
+      final nowIso = DateTime.now().toUtc().toIso8601String();
+      final tokenPayload = {
+        'user_id': userUuid,
+        'fcm_token': 'fcm_token_sample_abc_123',
+        'platform': 'android',
+        'device_name': 'android',
+        'is_active': true,
+        'updated_at': nowIso,
+      };
+
+      expect(tokenPayload['user_id'], userUuid);
+      expect(tokenPayload['fcm_token'], 'fcm_token_sample_abc_123');
+      expect(tokenPayload['platform'], 'android');
+      expect(tokenPayload['is_active'], true);
+    });
+
+    test('Chat push notification payload contains required type, sender, recipient, and body', () {
+      final senderId = 'sender-firebase-uid';
+      final receiverId = 'receiver-firebase-uid';
+      final senderUuid = UuidUtils.firebaseUidToUuid(senderId);
+      final receiverUuid = UuidUtils.firebaseUidToUuid(receiverId);
+
+      final payload = {
+        'type': 'message',
+        'sender_id': senderId,
+        'recipient_id': receiverId,
+        'conversation_id': '${senderUuid}_$receiverUuid',
+        'message_id': 'msg-12345',
+        'title': 'Brian',
+        'body': 'Hello, are you available?',
+        'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+      };
+
+      expect(payload['type'], 'message');
+      expect(payload['sender_id'], senderId);
+      expect(payload['recipient_id'], receiverId);
+      expect(payload['title'], 'Brian');
+      expect(payload['body'], 'Hello, are you available?');
+      expect(payload['click_action'], 'FLUTTER_NOTIFICATION_CLICK');
+    });
+
+    test('PushNotificationService singleton instance maintains consistent reference', () {
+      final service1 = PushNotificationService();
+      final service2 = PushNotificationService();
+      expect(identical(service1, service2), true);
+    });
+
+    test('Hire Request FCM payload formats correctly for provider', () {
+      final clientUid = 'client-firebase-uid';
+      final providerUid = 'provider-firebase-uid';
+
+      final payload = {
+        'type': 'hire_request',
+        'sender_id': clientUid,
+        'recipient_id': providerUid,
+        'request_id': 'booking-req-001',
+        'title': 'New Hire Request',
+        'body': 'Alice sent you a service request for Plumbing.',
+        'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+        'customer_id': UuidUtils.firebaseUidToUuid(clientUid),
+        'provider_id': UuidUtils.firebaseUidToUuid(providerUid),
+      };
+
+      expect(payload['type'], 'hire_request');
+      expect(payload['sender_id'], clientUid);
+      expect(payload['recipient_id'], providerUid);
+      expect(payload['request_id'], 'booking-req-001');
+      expect(payload['title'], 'New Hire Request');
+      expect(payload['click_action'], 'FLUTTER_NOTIFICATION_CLICK');
+    });
+
+    test('Hire Accepted / Rejected / Cancelled FCM payloads include proper status and identifiers', () {
+      final clientUid = 'client-firebase-uid';
+      final providerUid = 'provider-firebase-uid';
+
+      final acceptedPayload = {
+        'type': 'hire_accepted',
+        'sender_id': providerUid,
+        'recipient_id': clientUid,
+        'request_id': 'booking-req-001',
+        'title': 'Request Accepted',
+        'body': 'John Plumber accepted your service request.',
+      };
+      expect(acceptedPayload['type'], 'hire_accepted');
+      expect(acceptedPayload['recipient_id'], clientUid);
+
+      final rejectedPayload = {
+        'type': 'hire_rejected',
+        'sender_id': providerUid,
+        'recipient_id': clientUid,
+        'request_id': 'booking-req-001',
+        'title': 'Request Declined',
+        'body': 'John Plumber declined your service request.',
+      };
+      expect(rejectedPayload['type'], 'hire_rejected');
+      expect(rejectedPayload['recipient_id'], clientUid);
+
+      final cancelledPayload = {
+        'type': 'hire_cancelled',
+        'sender_id': clientUid,
+        'recipient_id': providerUid,
+        'request_id': 'booking-req-001',
+        'title': 'Request Cancelled',
+        'body': 'Alice cancelled the service request.',
+      };
+      expect(cancelledPayload['type'], 'hire_cancelled');
+      expect(cancelledPayload['recipient_id'], providerUid);
+    });
+
+    test('Job lifecycle FCM notifications format correctly for job_started, job_completed, job_cancelled', () {
+      final clientUid = 'client-firebase-uid';
+      final providerUid = 'provider-firebase-uid';
+
+      final startedPayload = {
+        'type': 'job_started',
+        'sender_id': providerUid,
+        'recipient_id': clientUid,
+        'request_id': 'job-001',
+        'title': 'Service Started',
+        'body': 'John Plumber started working on your service.',
+      };
+      expect(startedPayload['type'], 'job_started');
+      expect(startedPayload['recipient_id'], clientUid);
+
+      final completedPayload = {
+        'type': 'job_completed',
+        'sender_id': providerUid,
+        'recipient_id': clientUid,
+        'request_id': 'job-001',
+        'title': 'Service Completed',
+        'body': 'John Plumber completed your service request.',
+      };
+      expect(completedPayload['type'], 'job_completed');
+      expect(completedPayload['recipient_id'], clientUid);
+
+      final cancelledPayload = {
+        'type': 'job_cancelled',
+        'sender_id': clientUid,
+        'recipient_id': providerUid,
+        'request_id': 'job-001',
+        'title': 'Request Cancelled',
+        'body': 'Alice cancelled the service request.',
+      };
+      expect(cancelledPayload['type'], 'job_cancelled');
+      expect(cancelledPayload['recipient_id'], providerUid);
+    });
+
+    test('Review FCM push notification formats correctly for provider with rating and IDs', () {
+      final clientUid = 'client-firebase-uid';
+      final providerUid = 'provider-firebase-uid';
+      final clientUuid = UuidUtils.firebaseUidToUuid(clientUid);
+      final providerUuid = UuidUtils.firebaseUidToUuid(providerUid);
+
+      final payload = {
+        'type': 'review',
+        'sender_id': clientUuid,
+        'recipient_id': providerUuid,
+        'title': 'New Review Received',
+        'body': 'Alice left you a 5-star review.',
+        'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+        'review_id': 'rev-001',
+        'job_id': 'job-001',
+        'customer_id': clientUuid,
+        'provider_id': providerUuid,
+        'rating': 5,
+      };
+
+      expect(payload['type'], 'review');
+      expect(payload['sender_id'], clientUuid);
+      expect(payload['recipient_id'], providerUuid);
+      expect(payload['title'], 'New Review Received');
+      expect(payload['body'], 'Alice left you a 5-star review.');
+      expect(payload['review_id'], 'rev-001');
+      expect(payload['job_id'], 'job-001');
+      expect(payload['customer_id'], clientUuid);
+      expect(payload['provider_id'], providerUuid);
+      expect(payload['rating'], 5);
+      expect(payload['click_action'], 'FLUTTER_NOTIFICATION_CLICK');
+    });
+
+    test('Payment FCM push notifications format correctly for payment_success, payment_failed, and payment_refunded', () {
+      final providerUid = 'provider-firebase-uid';
+      final providerUuid = UuidUtils.firebaseUidToUuid(providerUid);
+
+      final successPayload = {
+        'type': 'payment_success',
+        'sender_id': 'system',
+        'recipient_id': providerUuid,
+        'title': 'Payment Successful 🎉',
+        'body': 'Your payment of UGX 25000 for FindiPro Premium was successful.',
+        'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+        'plan': 'premium',
+        'billing_period': 'monthly',
+        'amount': 25000,
+        'currency': 'UGX',
+        'transaction_reference': 'FP-SUB-premium-123456',
+        'status': 'success',
+      };
+      expect(successPayload['type'], 'payment_success');
+      expect(successPayload['recipient_id'], providerUuid);
+      expect(successPayload['plan'], 'premium');
+      expect(successPayload['status'], 'success');
+
+      final failedPayload = {
+        'type': 'payment_failed',
+        'sender_id': 'system',
+        'recipient_id': providerUuid,
+        'title': 'Payment Failed',
+        'body': 'Your payment of UGX 25000 for FindiPro Premium could not be verified.',
+        'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+        'plan': 'premium',
+        'billing_period': 'monthly',
+        'amount': 25000,
+        'currency': 'UGX',
+        'transaction_reference': 'FP-SUB-premium-123456',
+        'status': 'failed',
+      };
+      expect(failedPayload['type'], 'payment_failed');
+      expect(failedPayload['recipient_id'], providerUuid);
+      expect(failedPayload['status'], 'failed');
+
+      final refundedPayload = {
+        'type': 'payment_refunded',
+        'sender_id': 'system',
+        'recipient_id': providerUuid,
+        'title': 'Subscription Cancelled',
+        'body': 'Your subscription auto-renewal has been cancelled.',
+        'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+        'status': 'cancelled',
+      };
+      expect(refundedPayload['type'], 'payment_refunded');
+      expect(refundedPayload['recipient_id'], providerUuid);
+      expect(refundedPayload['status'], 'cancelled');
+    });
+
+    test('UserModel maps is_online and last_seen from Supabase correctly', () {
+      final nowUtc = DateTime.now().toUtc();
+      final mapData = {
+        'id': 'a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d',
+        'full_name': 'Sarah Technician',
+        'email': 'sarah@findipro.com',
+        'role': 'provider',
+        'is_online': true,
+        'last_seen': nowUtc.toIso8601String(),
+      };
+
+      final user = UserModel.fromMap(mapData);
+      expect(user.isOnline, true);
+      expect(user.lastSeen, isNotNull);
+      expect(user.lastSeenFormatted, 'Online');
+
+      final serialized = user.toMap();
+      expect(serialized['is_online'], true);
+      expect(serialized['isOnline'], true);
+      expect(serialized['last_seen'], isNotNull);
+    });
+
+    test('UserModel.formatPresence returns accurate relative timestamps', () {
+      expect(UserModel.formatPresence(isOnline: true), 'Online');
+      expect(UserModel.formatPresence(isOnline: false, lastSeen: null), 'Offline');
+
+      final now = DateTime.now();
+      // Today
+      expect(
+        UserModel.formatPresence(isOnline: false, lastSeen: now),
+        contains('last seen today at'),
+      );
+
+      // Yesterday
+      final yesterday = now.subtract(const Duration(days: 1));
+      expect(
+        UserModel.formatPresence(isOnline: false, lastSeen: yesterday),
+        contains('last seen yesterday at'),
+      );
+
+      // 5 days ago
+      final oldDate = now.subtract(const Duration(days: 5));
+      expect(
+        UserModel.formatPresence(isOnline: false, lastSeen: oldDate),
+        contains('last seen'),
+      );
     });
   });
 }

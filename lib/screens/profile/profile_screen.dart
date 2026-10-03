@@ -1,20 +1,26 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../core/widgets/findipro_logo.dart';
 import '../../models/user_model.dart';
 import '../../repositories/review_repository.dart';
 import '../../repositories/user_repository.dart';
 import '../../services/auth_service.dart';
+import '../../services/google_auth_service.dart';
 import '../auth/login_screen.dart';
 import '../auth/register_client_screen.dart';
 import '../auth/register_provider_screen.dart';
 import '../saved_screen.dart';
 import '../my_requests_screen.dart';
 import '../admin/admin_dashboard_screen.dart';
+import '../client/client_dashboard_screen.dart';
 import '../notifications/notifications_screen.dart';
+import '../provider/provider_dashboard_screen.dart';
 import '../provider/provider_detail_screen.dart';
 import '../provider/provider_plan_screen.dart';
 import '../../repositories/notification_repository.dart';
+import '../feedback/feedback_screen.dart';
 import '../settings_screen.dart';
+import '../quotation/quotations_list_screen.dart';
 import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -79,12 +85,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
           future: _profileFuture,
           builder: (context, profileSnapshot) {
             final dbUser = profileSnapshot.data;
+            final fbName = (firebaseUser.displayName != null && firebaseUser.displayName!.trim().isNotEmpty)
+                ? firebaseUser.displayName!.trim()
+                : '';
+            final fallbackName = fbName.isNotEmpty
+                ? fbName
+                : (firebaseUser.email != null && firebaseUser.email!.contains('@')
+                    ? firebaseUser.email!.split('@').first
+                        .split(RegExp(r'[._-]'))
+                        .where((p) => p.isNotEmpty)
+                        .map((p) => p[0].toUpperCase() + (p.length > 1 ? p.substring(1) : ''))
+                        .join(' ')
+                    : 'FindiPro User');
+
             final user = dbUser ??
                 UserModel(
                   uid: firebaseUser.uid,
-                  name: (firebaseUser.displayName != null && firebaseUser.displayName!.trim().isNotEmpty)
-                      ? firebaseUser.displayName!.trim()
-                      : (firebaseUser.email?.split('@').first ?? 'FindiPro User'),
+                  name: fallbackName,
                   email: firebaseUser.email ?? '',
                   phone: firebaseUser.phoneNumber ?? '',
                   photoUrl: firebaseUser.photoURL,
@@ -102,23 +119,177 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-class _GuestProfile extends StatelessWidget {
+class _GuestProfile extends StatefulWidget {
+  @override
+  State<_GuestProfile> createState() => _GuestProfileState();
+}
+
+class _GuestProfileState extends State<_GuestProfile> {
+  final _googleAuth = GoogleAuthService();
+  bool _loadingGoogle = false;
+
+  Future<void> _handleGoogleAuth() async {
+    setState(() => _loadingGoogle = true);
+    try {
+      final googleData = await _googleAuth.authenticateWithGoogle();
+      if (googleData == null) {
+        if (mounted) setState(() => _loadingGoogle = false);
+        return;
+      }
+
+      final hasProfile = await _googleAuth.hasExistingProfile(googleData.uid);
+      if (hasProfile) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Welcome back to FindiPro!'),
+              backgroundColor: Color(0xFF10B981),
+            ),
+          );
+        }
+        return;
+      }
+
+      // New user: Prompt role selection
+      if (!mounted) return;
+      final role = await showModalBottomSheet<String>(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Join FindiPro',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Select how you would like to register your account:',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFE0F2FE),
+                    child: Icon(Icons.person, color: Color(0xFF0284C7)),
+                  ),
+                  title: const Text('Client Account', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Hire trusted professionals for your tasks'),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onTap: () => Navigator.pop(ctx, 'customer'),
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFFEF3C7),
+                    child: Icon(Icons.handyman, color: Color(0xFFD97706)),
+                  ),
+                  title: const Text('Service Provider Account', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Offer your services and get hired by clients'),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onTap: () => Navigator.pop(ctx, 'provider'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      if (role == null) return;
+
+      if (role == 'provider') {
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => RegisterProviderScreen(initialGoogleData: googleData),
+            ),
+          );
+        }
+        return;
+      }
+
+      if (role == 'customer') {
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => RegisterClientScreen(initialGoogleData: googleData),
+            ),
+          );
+        }
+        return;
+      }
+
+      final cred = await _googleAuth.signUpWithGoogle(selectedRole: role);
+      if (cred != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Welcome to FindiPro!'),
+            backgroundColor: Color(0xFF10B981),
+          ),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      debugPrint('>>> [ProfileScreen._handleGoogleAuth] FirebaseAuthException: ${e.message}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message ?? 'Google sign-in failed. Please try again.')),
+        );
+      }
+    } catch (e) {
+      debugPrint('>>> [ProfileScreen._handleGoogleAuth] Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Google sign-in failed. Please check connection and try again.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingGoogle = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         body: SafeArea(
           child: ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              const SizedBox(height: 24),
-              const Center(child: CircleAvatar(radius: 56, child: Icon(Icons.person, size: 56))),
-              const SizedBox(height: 24),
-              const Text('Welcome to FindiPro', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              Text(
-                'Find trusted professionals, request services, save providers and chat securely.',
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withAlpha(153), height: 1.5),
+              const SizedBox(height: 40),
+              const Center(child: FindiProLogo(height: 72)),
+              const SizedBox(height: 12),
+              const Center(
+                child: Text('Your trusted home services app in Uganda', style: TextStyle(color: Colors.grey)),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
+              OutlinedButton(
+                onPressed: _loadingGoogle ? null : _handleGoogleAuth,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(50),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: _loadingGoogle
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator.adaptive(strokeWidth: 2))
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Image.network(
+                            'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
+                            width: 20,
+                            height: 20,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.g_mobiledata, size: 24, color: Colors.red),
+                          ),
+                          const SizedBox(width: 10),
+                          const Text('Continue with Google', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                        ],
+                      ),
+              ),
+              const SizedBox(height: 12),
               ElevatedButton(
                 onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LoginScreen())),
                 child: const Text('Login'),
@@ -133,6 +304,19 @@ class _GuestProfile extends StatelessWidget {
                 onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterProviderScreen())),
                 icon: const Icon(Icons.work_outline),
                 label: const Text('Become a Service Provider'),
+              ),
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: const Icon(Icons.lightbulb_outline, color: Color(0xFF0891B2)),
+                title: const Text('Request a Feature or Service'),
+                subtitle: const Text('Suggest new services or app tools', style: TextStyle(fontSize: 12)),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const FeedbackScreen(initialTabIndex: 1)),
+                ),
               ),
             ],
           ),
@@ -152,6 +336,29 @@ class _LoggedInProfile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasPhoto = user.photoUrl != null && user.photoUrl!.trim().isNotEmpty;
+
+    final String resolvedDisplayName = () {
+      if (user.name.isNotEmpty && user.name.trim().toLowerCase() != 'findipro user') {
+        return user.name.trim();
+      }
+      final fbUser = FirebaseAuth.instance.currentUser;
+      if (fbUser?.displayName != null && fbUser!.displayName!.trim().isNotEmpty && fbUser.displayName!.trim().toLowerCase() != 'findipro user') {
+        return fbUser.displayName!.trim();
+      }
+      final emailStr = (user.email.isNotEmpty ? user.email : fbUser?.email) ?? '';
+      if (emailStr.contains('@')) {
+        final prefix = emailStr.split('@').first.trim();
+        if (prefix.isNotEmpty && prefix.toLowerCase() != 'findipro user') {
+          return prefix
+              .split(RegExp(r'[._-]'))
+              .where((p) => p.isNotEmpty)
+              .map((p) => p[0].toUpperCase() + (p.length > 1 ? p.substring(1) : ''))
+              .join(' ');
+        }
+      }
+      if (user.isAdmin || user.role == 'admin') return 'Admin';
+      return 'FindiPro User';
+    }();
 
     return Scaffold(
       body: SafeArea(
@@ -207,7 +414,7 @@ class _LoggedInProfile extends StatelessWidget {
                           children: [
                             Expanded(
                               child: Text(
-                                user.name.isEmpty ? 'FindiPro User' : user.name,
+                                resolvedDisplayName,
                                 style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
                               ),
                             ),
@@ -310,6 +517,12 @@ class _LoggedInProfile extends StatelessWidget {
               if (user.isProvider) ...[
                 _tile(
                   context,
+                  Icons.dashboard_customize_outlined,
+                  'Service Provider Dashboard',
+                  () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProviderDashboardScreen())),
+                ),
+                _tile(
+                  context,
                   Icons.verified_user_outlined,
                   'Identity Verification (${user.verificationStatus?.toUpperCase() ?? (user.isVerifiedBadge ? 'APPROVED' : 'UNVERIFIED')})',
                   () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProviderPlanScreen())),
@@ -329,12 +542,28 @@ class _LoggedInProfile extends StatelessWidget {
                     MaterialPageRoute(builder: (_) => ProviderDetailScreen(provider: user)),
                   ),
                 ),
+              ] else ...[
+                _tile(
+                  context,
+                  Icons.dashboard_outlined,
+                  'Client Dashboard',
+                  () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ClientDashboardScreen())),
+                ),
               ],
               _tile(
                 context,
                 Icons.receipt_long_outlined,
                 user.isProvider ? 'Bookings & requests' : 'My requests',
                 () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MyRequestsScreen())),
+              ),
+              _tile(
+                context,
+                Icons.request_quote_outlined,
+                user.isProvider ? 'Quotations & Invoices' : 'My Quotations & Invoices',
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const QuotationsListScreen()),
+                ),
               ),
               StreamBuilder<int>(
                 stream: NotificationRepository().getUnreadCountStream(user.uid),
@@ -383,6 +612,15 @@ class _LoggedInProfile extends StatelessWidget {
               ],
               _tile(
                 context,
+                Icons.lightbulb_outline,
+                'Request a Feature or Service',
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => FeedbackScreen(user: user, initialTabIndex: 1)),
+                ),
+              ),
+              _tile(
+                context,
                 Icons.edit_outlined,
                 'Edit profile',
                 () async {
@@ -421,14 +659,41 @@ class _LoggedInProfile extends StatelessWidget {
                 context,
                 Icons.logout,
                 'Logout',
-                () async {
-                  await AuthService().logout();
-                },
+                () => _confirmLogout(context),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  void _confirmLogout(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Log Out'),
+          content: const Text('Are you sure you want to log out of your FindiPro account?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                Navigator.pop(ctx);
+                await AuthService().logout();
+              },
+              child: const Text('Log Out'),
+            ),
+          ],
+        );
+      },
     );
   }
 

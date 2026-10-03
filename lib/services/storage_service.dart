@@ -60,6 +60,19 @@ class StorageService {
     return uploadAvatar(uid: uid, file: file, bucket: bucket);
   }
 
+  /// Uploads identity verification documents (National ID, passport, business license).
+  Future<String> uploadDocument({
+    required String uid,
+    required File file,
+    required String docType, // e.g. 'id_front', 'id_back', 'business_doc'
+  }) async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final ext = p.extension(file.path).replaceAll('.', '').toLowerCase();
+    final fileExt = (ext.isEmpty || ext == 'jpg' || ext == 'jpeg') ? 'jpg' : ext;
+    final filePath = '$uid/doc_${docType}_$timestamp.$fileExt';
+    return uploadImage(file: file, path: filePath, bucket: 'documents', uid: uid);
+  }
+
   /// Uploads any image file to Supabase Storage using uploadBinary and returns the public URL.
   Future<String> uploadImage({
     required File file,

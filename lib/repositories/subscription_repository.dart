@@ -4,6 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/config/supabase_config.dart';
 import '../core/utils/uuid_utils.dart';
 import '../models/subscription_model.dart';
+import '../repositories/notification_repository.dart';
+import '../services/push_notification_service.dart';
 
 class SubscriptionRepository {
   SupabaseClient get _supabase => SupabaseConfig.client;
@@ -144,6 +146,36 @@ class SubscriptionRepository {
       };
       await _supabase.from('providers').update(syncPayload).or('id.eq.$providerUuid,user_id.eq.$providerUuid,firebase_uid.eq.$providerId,uid.eq.$providerId');
       await _supabase.from('profiles').update(syncPayload).or('id.eq.$providerUuid,firebase_uid.eq.$providerId');
+
+      // Dispatch payment_refunded / cancellation notification (non-fatal)
+      try {
+        final notifTitle = 'Subscription Cancelled';
+        final notifBody = 'Your subscription auto-renewal has been cancelled.';
+
+        await NotificationRepository().createNotification(
+          userId: providerId,
+          title: notifTitle,
+          body: notifBody,
+          type: 'payment_refunded',
+          data: {
+            'status': 'cancelled',
+          },
+        );
+
+        await PushNotificationService().sendPushNotificationToUser(
+          recipientUserId: providerId,
+          senderUserId: 'system',
+          title: notifTitle,
+          body: notifBody,
+          type: 'payment_refunded',
+          extraData: {
+            'status': 'cancelled',
+          },
+        );
+      } catch (e) {
+        debugPrint('>>> [SubscriptionRepository.cancelSubscription] Notification note (non-fatal): $e');
+      }
+
       return true;
     } catch (e) {
       debugPrint('>>> [SubscriptionRepository.cancelSubscription] Error: $e');
